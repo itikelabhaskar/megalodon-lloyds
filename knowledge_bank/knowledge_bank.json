@@ -1,0 +1,145 @@
+{
+  "issue_patterns": {
+    "DOB_FUTURE": {
+      "pattern": "date_of_birth > CURRENT_DATE",
+      "description": "Date of birth is in the future",
+      "dq_dimension": "Accuracy",
+      "historical_fixes": [
+        {
+          "fix_id": "FIX_DOB_001",
+          "fix_type": "Data Repair",
+          "action": "SET date_of_birth = NULL",
+          "description": "Set invalid future dates to NULL and flag for manual review",
+          "success_rate": 0.95,
+          "approval_count": 3,
+          "rejection_count": 0,
+          "auto_approve": false,
+          "last_used": "2024-03-15",
+          "sql_template": "UPDATE {table} SET date_of_birth = NULL, data_quality_flag = 'INVALID_DOB' WHERE date_of_birth > CURRENT_DATE()"
+        }
+      ]
+    },
+    "PREMIUM_NEGATIVE": {
+      "pattern": "premium < 0",
+      "description": "Premium amount is negative",
+      "dq_dimension": "Accuracy",
+      "historical_fixes": [
+        {
+          "fix_id": "FIX_PREM_001",
+          "fix_type": "Data Repair",
+          "action": "SET premium = ABS(premium)",
+          "description": "Take absolute value (likely sign error)",
+          "success_rate": 0.88,
+          "approval_count": 4,
+          "rejection_count": 1,
+          "auto_approve": true,
+          "last_used": "2024-05-20",
+          "sql_template": "UPDATE {table} SET premium = ABS(premium) WHERE premium < 0"
+        }
+      ]
+    },
+    "STATUS_TEMPORAL_INCONSISTENCY": {
+      "pattern": "deceased status changes to active in later weeks",
+      "description": "Customer marked as deceased becomes active in subsequent weeks",
+      "dq_dimension": "Timeliness",
+      "historical_fixes": [
+        {
+          "fix_id": "FIX_STATUS_001",
+          "fix_type": "Data Repair",
+          "action": "Propagate 'Deceased' status to all future weeks",
+          "description": "Once deceased, status should remain deceased in all subsequent weeks",
+          "success_rate": 0.98,
+          "approval_count": 5,
+          "rejection_count": 0,
+          "auto_approve": true,
+          "last_used": "2024-06-10",
+          "sql_template": "UPDATE {table_week_n} SET CUS_LIFE_STATUS = 'Deceased' WHERE CUS_ID IN (SELECT CUS_ID FROM {table_week_n_minus_1} WHERE CUS_LIFE_STATUS = 'Deceased')"
+        }
+      ]
+    },
+    "DEATH_DATE_MISSING_FOR_DECEASED": {
+      "pattern": "CUS_LIFE_STATUS = 'Deceased' AND CUS_DEATH_DATE IS NULL",
+      "description": "Deceased customer has no death date recorded",
+      "dq_dimension": "Completeness",
+      "historical_fixes": [
+        {
+          "fix_id": "FIX_DEATH_001",
+          "fix_type": "Escalation",
+          "action": "Raise JIRA ticket for manual investigation",
+          "description": "Death date is regulatory-required field, needs manual verification",
+          "success_rate": 1.0,
+          "approval_count": 8,
+          "rejection_count": 0,
+          "auto_approve": false,
+          "last_used": "2024-07-25",
+          "jira_template": {
+            "priority": "high",
+            "assignee": "data-steward-team",
+            "labels": ["regulatory", "deceased-customer", "manual-review"]
+          }
+        },
+        {
+          "fix_id": "FIX_DEATH_002",
+          "fix_type": "Data Repair",
+          "action": "Use policy lapse date as proxy for death date",
+          "description": "If policy lapsed shortly after status changed to deceased, use lapse date",
+          "success_rate": 0.70,
+          "approval_count": 2,
+          "rejection_count": 1,
+          "auto_approve": false,
+          "last_used": "2024-04-12",
+          "sql_template": "UPDATE {table} SET CUS_DEATH_DATE = policy_lapse_date WHERE CUS_LIFE_STATUS = 'Deceased' AND CUS_DEATH_DATE IS NULL AND DATEDIFF(policy_lapse_date, status_change_date) < 30"
+        }
+      ]
+    },
+    "NI_NUMBER_INVALID_FORMAT": {
+      "pattern": "ni_number does not match UK format",
+      "description": "National Insurance number has invalid format",
+      "dq_dimension": "Conformity",
+      "historical_fixes": [
+        {
+          "fix_id": "FIX_NI_001",
+          "fix_type": "Data Repair",
+          "action": "Attempt format correction (remove spaces, fix case)",
+          "description": "Try to fix common formatting issues like extra spaces or incorrect capitalization",
+          "success_rate": 0.75,
+          "approval_count": 3,
+          "rejection_count": 1,
+          "auto_approve": false,
+          "last_used": "2024-08-05",
+          "sql_template": "UPDATE {table} SET ni_number = UPPER(REPLACE(ni_number, ' ', '')) WHERE ni_number IS NOT NULL AND NOT REGEXP_CONTAINS(ni_number, r'^[A-Z]{2}[0-9]{6}[A-D]$')"
+        }
+      ]
+    },
+    "DUPLICATE_POLICY_ID": {
+      "pattern": "policy_id appears multiple times",
+      "description": "Policy ID is not unique (violates primary key constraint)",
+      "dq_dimension": "Uniqueness",
+      "historical_fixes": [
+        {
+          "fix_id": "FIX_DUP_001",
+          "fix_type": "Escalation",
+          "action": "Raise JIRA ticket for manual deduplication",
+          "description": "Requires business logic to determine which record is correct",
+          "success_rate": 1.0,
+          "approval_count": 6,
+          "rejection_count": 0,
+          "auto_approve": false,
+          "last_used": "2024-09-14",
+          "jira_template": {
+            "priority": "critical",
+            "assignee": "data-steward-team",
+            "labels": ["duplicate", "primary-key-violation", "manual-review"]
+          }
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "last_updated": "2024-09-14",
+    "total_patterns": 6,
+    "total_fixes": 11,
+    "auto_approve_threshold": 0.85,
+    "min_approval_count_for_auto": 3
+  }
+}

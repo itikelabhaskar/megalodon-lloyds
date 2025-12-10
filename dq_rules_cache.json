@@ -1,0 +1,134 @@
+{
+  "cache_metadata": {
+    "last_updated": "2025-12-11T00:07:17.264926",
+    "version": "1.0.0"
+  },
+  "tables": {
+    "policies_week1": {
+      "rules": [
+        {
+          "rule_id": "DQ_COMPLETENESS_001",
+          "name": "customer_dob_null_check",
+          "description": "Check for null values in Customer Date of Birth (CUS_DOB)",
+          "natural_language": "Customer DOB should be populated for all customers; missing values indicate incompleteness",
+          "sql": "SELECT * FROM `{TABLE_NAME}` WHERE CUS_DOB IS NULL",
+          "severity": "low",
+          "dq_dimension": "Completeness",
+          "scope": "single_table",
+          "source": "dataplex",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_ACCURACY_002",
+          "name": "customer_dob_future_check",
+          "description": "Check for future dates in Customer Date of Birth (CUS_DOB)",
+          "natural_language": "Customer DOB cannot be in the future; future dates indicate inaccurate data",
+          "sql": "SELECT * FROM `{TABLE_NAME}` WHERE CUS_DOB > CURRENT_DATE()",
+          "severity": "critical",
+          "dq_dimension": "Accuracy",
+          "scope": "single_table",
+          "source": "dataplex",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_CONFORMITY_003",
+          "name": "life_status_valid_values_check",
+          "description": "Validate that CUS_LIFE_STATUS contains only allowed values (Active, Deceased)",
+          "natural_language": "Customer life status should only be 'Active' or 'Deceased'; other values indicate non-conformity",
+          "sql": "SELECT * FROM `{TABLE_NAME}` WHERE CUS_LIFE_STATUS NOT IN ('Active', 'Deceased')",
+          "severity": "high",
+          "dq_dimension": "Conformity",
+          "scope": "single_table",
+          "source": "dataplex",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_ACCURACY_004",
+          "name": "premium_non_negative_check",
+          "description": "Ensure premium amounts (POLI_GROSS_PMT) are non-negative",
+          "natural_language": "Premium amounts cannot be negative; negative values indicate inaccurate data",
+          "sql": "SELECT * FROM `{TABLE_NAME}` WHERE POLI_GROSS_PMT < 0",
+          "severity": "high",
+          "dq_dimension": "Accuracy",
+          "scope": "single_table",
+          "source": "dataplex",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_CONFORMITY_005",
+          "name": "ni_number_format_check",
+          "description": "Validate NI number format (CUS_NI_NO)",
+          "natural_language": "NI number should follow the standard UK format; incorrect formats indicate non-conformity",
+          "sql": "SELECT * FROM `{TABLE_NAME}` WHERE CUS_NI_NO IS NOT NULL AND NOT REGEXP_CONTAINS(CUS_NI_NO, r'^[A-Z]{2}[0-9]{6}[A-D]$')",
+          "severity": "medium",
+          "dq_dimension": "Conformity",
+          "scope": "single_table",
+          "source": "dataplex",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_CONFORMITY_006",
+          "name": "deceased_customer_death_date_check",
+          "description": "Check that deceased customers have a death date (CUS_DEATH_DATE)",
+          "natural_language": "Customers with 'Deceased' life status should have a death date populated; missing death dates indicate inconsistency",
+          "sql": "SELECT * FROM `{TABLE_NAME}` WHERE CUS_LIFE_STATUS = 'Deceased' AND CUS_DEATH_DATE IS NULL",
+          "severity": "high",
+          "dq_dimension": "Conformity",
+          "scope": "single_table",
+          "source": "dataplex",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_TEMPORAL_007",
+          "name": "deceased_status_reversal_check",
+          "description": "Check if a customer marked as deceased in an earlier week becomes alive in a later week",
+          "natural_language": "Customers who were deceased should not become alive in later weeks - this indicates a data quality issue",
+          "sql": "SELECT w2.CUS_ID, w1.CUS_LIFE_STATUS as week1_status, w2.CUS_LIFE_STATUS as week2_status FROM `PROJECT.DATASET.policies_week1` w1 JOIN `PROJECT.DATASET.policies_week2` w2 ON w1.CUS_ID = w2.CUS_ID WHERE w1.CUS_LIFE_STATUS = 'Deceased' AND w2.CUS_LIFE_STATUS = 'Active'",
+          "severity": "critical",
+          "dq_dimension": "Timeliness",
+          "scope": "cross_week",
+          "source": "agent",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_TEMPORAL_008",
+          "name": "dob_change_across_weeks_check",
+          "description": "Check if a customer's date of birth (CUS_DOB) changes between weeks",
+          "natural_language": "A customer's date of birth should not change between weeks; changes indicate a data quality issue",
+          "sql": "SELECT w2.CUS_ID, w1.CUS_DOB as week1_dob, w2.CUS_DOB as week2_dob FROM `PROJECT.DATASET.policies_week1` w1 JOIN `PROJECT.DATASET.policies_week2` w2 ON w1.CUS_ID = w2.CUS_ID WHERE w1.CUS_DOB != w2.CUS_DOB",
+          "severity": "critical",
+          "dq_dimension": "Timeliness",
+          "scope": "cross_week",
+          "source": "agent",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_TEMPORAL_009",
+          "name": "premium_fluctuation_check",
+          "description": "Check for significant fluctuations in premium amounts (POLI_GROSS_PMT) between weeks",
+          "natural_language": "Premium amounts should not fluctuate significantly between weeks; large changes may indicate errors",
+          "sql": "SELECT w2.CUS_ID, w1.POLI_GROSS_PMT as week1_premium, w2.POLI_GROSS_PMT as week2_premium FROM `PROJECT.DATASET.policies_week1` w1 JOIN `PROJECT.DATASET.policies_week2` w2 ON w1.CUS_ID = w2.CUS_ID WHERE ABS(w2.POLI_GROSS_PMT - w1.POLI_GROSS_PMT) > (0.2 * w1.POLI_GROSS_PMT)",
+          "severity": "medium",
+          "dq_dimension": "Timeliness",
+          "scope": "cross_week",
+          "source": "agent",
+          "table": "policies_week1"
+        },
+        {
+          "rule_id": "DQ_TEMPORAL_010",
+          "name": "death_date_consistency_check",
+          "description": "Check if a customer's death date is consistent across weeks (if present)",
+          "natural_language": "Once a death date is recorded, it should remain consistent in subsequent weeks; changes indicate a data quality issue",
+          "sql": "SELECT w2.CUS_ID, w1.CUS_DEATH_DATE as week1_death_date, w2.CUS_DEATH_DATE as week2_death_date FROM `PROJECT.DATASET.policies_week1` w1 JOIN `PROJECT.DATASET.policies_week2` w2 ON w1.CUS_ID = w2.CUS_ID WHERE w1.CUS_DEATH_DATE IS NOT NULL AND w2.CUS_DEATH_DATE IS NOT NULL AND w1.CUS_DEATH_DATE != w2.CUS_DEATH_DATE",
+          "severity": "high",
+          "dq_dimension": "Timeliness",
+          "scope": "cross_week",
+          "source": "agent",
+          "table": "policies_week1"
+        }
+      ],
+      "generated_at": "2025-12-11T00:07:17.264926",
+      "rule_count": 10
+    }
+  }
+}

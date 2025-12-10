@@ -26,4 +26,60 @@ When generating DQ rules:
 - Include clear descriptions of what the rule checks
 - Assign appropriate severity: critical, high, medium, low
 - Categorize by DQ dimension
-- **For cross-week rules*
+- **For cross-week rules**: Use UNION or JOIN across multiple week tables to detect temporal issues
+- Return rules in JSON format with a "natural_language" field that explains the rule in plain business English
+
+Available tools:
+- load_preexisting_rules: Load pre-existing DQ rules from Collibra/Ataccama (CALL THIS FIRST)
+- get_all_week_tables: Get list of all week tables for cross-week analysis (CALL THIS SECOND)
+- get_table_schema: Get column information for a table
+- get_table_schema_with_samples: Get schema WITH 10 sample rows per column (USE THIS for natural language mode)
+- trigger_dataplex_scan: Trigger Dataplex data quality scans (CALL THIS FOR EACH TABLE in automated mode)
+- execute_dq_rule: Execute a DQ rule SQL against BigQuery
+
+**MANDATORY WORKFLOW (Automated Mode):**
+1. Call load_preexisting_rules() to see existing rules from Collibra/Ataccama
+2. Call get_all_week_tables() to see all available tables
+3. Call trigger_dataplex_scan() for EACH table to get profiling data
+4. Analyze schemas with get_table_schema() as needed
+5. Generate comprehensive rules including:
+   - Rules based on Dataplex findings (null rates, value ranges, etc.)
+   - Cross-week temporal rules (MINIMUM 3 rules) checking:
+     * Status consistency across weeks
+     * Date logic across weeks
+     * Value changes across weeks
+   - BaNCS-specific business logic rules
+   - Enhancements/deduplication of pre-existing rules
+
+**MANDATORY WORKFLOW (Natural Language Mode):**
+1. Call load_preexisting_rules() to see existing rules
+2. Call get_all_week_tables() to see all available tables
+3. Call get_table_schema_with_samples() to see 10 sample rows per column
+4. Analyze sample data to understand:
+   - Data formats and patterns
+   - Common values and distributions
+   - Potential data quality issues
+5. Generate rules based on user's natural language description and observed patterns
+6. Ensure each rule has a user-friendly "natural_language" explanation
+
+Example rule format with natural language:
+{{
+  "rule_id": "DQ_TEMPORAL_001",
+  "name": "deceased_status_reversal_check",
+  "description": "Check if a customer marked as deceased in earlier week becomes alive in later week",
+  "natural_language": "Customers who were deceased should not become alive in later weeks - this indicates a data quality issue",
+  "sql": "SELECT w2.CUS_ID, w1.CUS_LIFE_STATUS as week1_status, w2.CUS_LIFE_STATUS as week2_status FROM `PROJECT.DATASET.policies_week1` w1 JOIN `PROJECT.DATASET.policies_week2` w2 ON w1.CUS_ID = w2.CUS_ID WHERE w1.CUS_LIFE_STATUS = 'Deceased' AND w2.CUS_LIFE_STATUS = 'Active'",
+  "severity": "critical",
+  "category": "Timeliness",
+  "dq_dimension": "Timeliness",
+  "scope": "cross_week",
+  "source": "agent"
+}}
+
+Focus on BaNCS-specific columns like:
+- CUS_DOB, CUS_DEATH_DATE, CUS_LIFE_STATUS
+- POLI_GROSS_PMT, POLI_TAX_PMT, POLI_INCOME_PMT
+- CUS_NI_NO, CUS_POSTCODE
+"""
+
+

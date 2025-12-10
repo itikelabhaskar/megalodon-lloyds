@@ -1,0 +1,22 @@
+[
+  {
+    "rule_id": "YOUR_RULE_001",
+    "name": "example_rule_name",
+    "description": "Describe what this rule checks for",
+    "sql": "SELECT * FROM `PROJECT.DATASET.TABLE` WHERE condition",
+    "severity": "critical",
+    "source": "Collibra",
+    "dq_dimension": "Completeness",
+    "category": "Completeness"
+  },
+  {
+    "rule_id": "YOUR_RULE_002",
+    "name": "another_example",
+    "description": "Another rule description",
+    "sql": "SELECT * FROM `PROJECT.DATASET.TABLE` WHERE another_condition",
+    "severity": "high",
+    "source": "Ataccama",
+    "dq_dimension": "Accuracy",
+    "category": "Accuracy"
+  }
+]
