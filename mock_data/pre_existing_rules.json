@@ -1,0 +1,52 @@
+[
+  {
+    "rule_id": "COL_001",
+    "source": "collibra",
+    "name": "DOB_future_check",
+    "description": "Date of birth cannot be in the future",
+    "sql": "SELECT * FROM {table} WHERE CUS_DOB > CURRENT_DATE()",
+    "severity": "critical",
+    "category": "Accuracy",
+    "dq_dimension": "Accuracy"
+  },
+  {
+    "rule_id": "COL_002",
+    "source": "collibra",
+    "name": "premium_negative_check",
+    "description": "Premium amount must be positive",
+    "sql": "SELECT * FROM {table} WHERE POLI_GROSS_PMT < 0",
+    "severity": "high",
+    "category": "Validity",
+    "dq_dimension": "Accuracy"
+  },
+  {
+    "rule_id": "ATA_001",
+    "source": "ataccama",
+    "name": "customer_id_null_check",
+    "description": "Customer ID must not be null",
+    "sql": "SELECT * FROM {table} WHERE CUS_ID IS NULL",
+    "severity": "critical",
+    "category": "Completeness",
+    "dq_dimension": "Completeness"
+  },
+  {
+    "rule_id": "ATA_002",
+    "source": "ataccama",
+    "name": "life_status_death_date_consistency",
+    "description": "Deceased customers must have a death date",
+    "sql": "SELECT * FROM {table} WHERE CUS_LIFE_STATUS = 'DCD' AND CUS_DEATH_DATE IS NULL",
+    "severity": "high",
+    "category": "Consistency",
+    "dq_dimension": "Conformity"
+  },
+  {
+    "rule_id": "ATA_003",
+    "source": "ataccama",
+    "name": "ni_number_format_check",
+    "description": "NI number must follow UK format (2 letters + 6 digits + 1 letter)",
+    "sql": "SELECT * FROM {table} WHERE CUS_NI_NO IS NOT NULL AND NOT REGEXP_CONTAINS(CUS_NI_NO, r'^[A-Z]{2}[0-9]{6}[A-D]$')",
+    "severity": "medium",
+    "category": "Format",
+    "dq_dimension": "Conformity"
+  }
+]

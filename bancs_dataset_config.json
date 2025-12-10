@@ -1,0 +1,17 @@
+{
+  "datasets": [
+    {
+      "name": "bancs_dataset",
+      "project_id": "hackathon-practice-480508",
+      "dataset_id": "bancs_dataset",
+      "location": "us-central1",
+      "tables": [
+        "policies_week1",
+        "policies_week2",
+        "policies_week3",
+        "policies_week4"
+      ],
+      "description": "BaNCS Life Insurance Data - Week-wise Snapshots for Data Quality Management"
+    }
+  ]
+}
