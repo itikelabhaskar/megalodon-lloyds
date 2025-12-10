@@ -76,7 +76,7 @@ For each issue, return:
       "impact_estimate": "5 rows affected, no cascading changes",
       "risk_level": "low",
       "auto_approve_eligible": false,
-      "sql": "UPDATE {{table}} SET date_of_birth = NULL, data_quality_flag = 'INVALID_DOB' WHERE date_of_birth > CURRENT_DATE()"
+      "sql": "UPDATE TABLE_NAME SET date_of_birth = NULL, data_quality_flag = 'INVALID_DOB' WHERE date_of_birth > CURRENT_DATE()"
     }},
     {{
       "rank": 2,
@@ -88,7 +88,7 @@ For each issue, return:
       "impact_estimate": "5 rows affected, may introduce demographic bias",
       "risk_level": "medium",
       "auto_approve_eligible": false,
-      "sql": "UPDATE {{table}} SET date_of_birth = (SELECT PERCENTILE_CONT(date_of_birth, 0.5) OVER() FROM {{table}} WHERE date_of_birth <= CURRENT_DATE()) WHERE date_of_birth > CURRENT_DATE()"
+      "sql": "UPDATE TABLE_NAME SET date_of_birth = (SELECT PERCENTILE_CONT(date_of_birth, 0.5) OVER() FROM TABLE_NAME WHERE date_of_birth <= CURRENT_DATE()) WHERE date_of_birth > CURRENT_DATE()"
     }},
     {{
       "rank": 3,

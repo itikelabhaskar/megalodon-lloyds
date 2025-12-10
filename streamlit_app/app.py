@@ -1105,15 +1105,27 @@ with tab2:
                 if st.button("🔬 Group Issues & Generate Remediation Strategies", type="primary", key="group_issues_btn"):
                     with st.spinner("🤖 Treatment Agent is analyzing and grouping issues..."):
                         try:
+                            # Import required components
                             from dq_agents.treatment.agent import treatment_agent
+                            from google.genai import types
+                            from google.adk.sessions import InMemorySessionService
+                            from google.adk.artifacts import InMemoryArtifactService
+                            from google.adk.runners import Runner
+                            
+                            # Debug: Check agent
+                            st.info(f"✓ Treatment Agent loaded: {treatment_agent.name}")
                             
                             # Set up ADK components
                             session_service = InMemorySessionService()
                             artifact_service = InMemoryArtifactService()
+                            
+                            # Create session
                             session = asyncio.run(session_service.create_session(
                                 app_name="DQTreatmentAgent",
                                 user_id="streamlit_user"
                             ))
+                            
+                            st.info(f"✓ Session created: {session.id}")
                             
                             # Create runner
                             runner = Runner(
@@ -1122,6 +1134,8 @@ with tab2:
                                 artifact_service=artifact_service,
                                 session_service=session_service,
                             )
+                            
+                            st.info("✓ Runner initialized")
                             
                             # Prepare issue summary for agent
                             issues_summary = []
@@ -1198,14 +1212,50 @@ Return JSON with:
 }}
 """
                             
-                            # Run agent
-                            response = asyncio.run(runner.run_async(
-                                message=prompt,
-                                session_id=session.id
-                            ))
+                            st.info("✓ Sending prompt to agent...")
+                            
+                            # Run agent with proper ADK API
+                            content = types.Content(role="user", parts=[types.Part(text=prompt)])
+                            
+                            try:
+                                events = list(runner.run(
+                                    user_id="streamlit_user",
+                                    session_id=session.id,
+                                    new_message=content
+                                ))
+                            except Exception as run_error:
+                                st.error(f"❌ Error during runner.run(): {str(run_error)}")
+                                import traceback
+                                st.code(traceback.format_exc())
+                                st.stop()
+                            
+                            st.info(f"✓ Got {len(events)} events")
+                            
+                            # Check if we got events
+                            if not events:
+                                st.error("❌ No response from Treatment Agent. Please check agent configuration.")
+                                st.stop()
+                            
+                            # Extract response from last event
+                            last_event = events[-1]
+                            if not hasattr(last_event, 'content') or not last_event.content:
+                                st.error(f"❌ Last event has no content. Event type: {type(last_event)}")
+                                st.stop()
+                            
+                            if not last_event.content.parts:
+                                st.error("❌ Last event content has no parts.")
+                                st.stop()
+                            
+                            response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
+                            
+                            if not response_text:
+                                st.error("❌ Treatment Agent returned no text content.")
+                                st.stop()
+                            
+                            st.info(f"✓ Response length: {len(response_text)} characters")
                             
                             # Store grouped issues
-                            st.session_state.grouped_issues = response.response
+                            st.session_state.grouped_issues = response_text
                             st.success("✅ Issues grouped and remediation strategies generated!")
                             st.rerun()
                             
@@ -1279,22 +1329,24 @@ Return JSON with:
                                             if 'sql' in fix:
                                                 st.code(fix.get('sql'), language="sql")
                                             
-                                            # Action buttons
-                                            col_btn1, col_btn2 = st.columns(2)
-                                            with col_btn1:
-                                                if st.button(f"✅ Approve Fix {rank} for Group {group_idx+1}", key=f"approve_g{group_idx}_f{rank}"):
-                                                    # Store for Remediator
-                                                    st.session_state.approved_fix = {
-                                                        "group": group,
-                                                        "fix": fix,
-                                                        "timestamp": __import__('datetime').datetime.now().isoformat()
-                                                    }
-                                                    st.success(f"Fix {rank} approved! Go to Remediator tab.")
-                                            with col_btn2:
-                                                if st.button(f"❌ Reject Fix {rank}", key=f"reject_g{group_idx}_f{rank}"):
-                                                    st.warning("Fix rejected. Feedback logged to Knowledge Bank.")
-                                            
-                                            st.divider()
+                                    # Action buttons
+                                    col_btn1, col_btn2 = st.columns(2)
+                                    with col_btn1:
+                                        if st.button(f"✅ Approve Fix {rank} for Group {group_idx+1}", key=f"approve_g{group_idx}_f{rank}"):
+                                            # Store for Remediator
+                                            st.session_state.approved_fix = {
+                                                "group": group,
+                                                "fix": fix,
+                                                "timestamp": __import__('datetime').datetime.now().isoformat()
+                                            }
+                                            st.success(f"✅ Fix {rank} approved!")
+                                            st.info("👉 Go to **Remediator** tab to execute the fix")
+                                            st.session_state.active_tab = "remediator"
+                                    with col_btn2:
+                                        if st.button(f"❌ Reject Fix {rank}", key=f"reject_g{group_idx}_f{rank}"):
+                                            st.warning("Fix rejected. Feedback logged to Knowledge Bank.")
+                                    
+                                    st.divider()
                         else:
                             st.warning("No issue groups generated")
                     
@@ -1622,7 +1674,11 @@ with tab3:
                                     "table_name": analysis['rule'].get('table', 'unknown'),
                                     "timestamp": __import__('datetime').datetime.now().isoformat()
                                 }
-                                st.success(f"Fix {rank} approved! Go to Remediator tab to execute.")
+                                st.success(f"✅ Fix {rank} approved!")
+                                # Button to navigate to Remediator
+                                st.info("👉 Go to **Remediator** tab to execute the fix")
+                                # Force switch to remediator tab
+                                st.session_state.active_tab = "remediator"
                         with col_btn2:
                             if st.button(f"❌ Reject Fix {rank}", key=f"reject_{rank}"):
                                 # Update Knowledge Bank with rejection
@@ -1662,8 +1718,382 @@ with tab3:
             st.rerun()
     
 with tab3:
-    st.header("Remediator Agent")
-    st.info("🚧 Coming soon: Fix execution and validation")
+    st.header("🔧 Remediator Agent")
+    st.markdown("Execute approved DQ fixes with validation and safety checks")
+    
+    # Check if there's an approved fix
+    if 'approved_fix' not in st.session_state:
+        st.info("ℹ️ No approved fix pending. Please approve a fix in the Treatment tab first.")
+        
+        # Show recent JIRA tickets
+        st.divider()
+        st.subheader("📋 Recent JIRA Tickets")
+        
+        try:
+            import sys
+            sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+            from jira_mock.ticket_manager import list_tickets
+            
+            tickets = list_tickets()
+            
+            if tickets:
+                for ticket in tickets[-5:]:  # Show last 5 tickets
+                    with st.expander(f"{ticket['ticket_id']}: {ticket['summary']}", expanded=False):
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Priority", ticket['priority'])
+                        with col2:
+                            st.metric("Status", ticket['status'])
+                        with col3:
+                            st.metric("Affected Rows", ticket.get('affected_rows', 'N/A'))
+                        
+                        st.write(f"**Created:** {ticket['created_at']}")
+                        st.write(f"**Assignee:** {ticket['assignee']}")
+                        st.write(f"**Description:** {ticket['description']}")
+                        
+                        if ticket.get('attachment') and ticket['attachment'].get('content'):
+                            st.code(ticket['attachment']['content'], language="sql")
+            else:
+                st.info("No JIRA tickets created yet")
+        except Exception as e:
+            st.error(f"Error loading JIRA tickets: {str(e)}")
+    
+    else:
+        # Display approved fix details
+        approved = st.session_state.approved_fix
+        
+        st.success("✅ Fix approved and ready for execution")
+        
+        # Extract fix details
+        fix = approved.get('fix', {})
+        issue = approved.get('issue', {})
+        table_name = approved.get('table_name', 'unknown')
+        
+        # Display fix summary
+        st.subheader("📋 Fix Summary")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Fix Type", fix.get('fix_type', 'N/A'))
+        with col2:
+            st.metric("Risk Level", fix.get('risk_level', 'N/A').upper())
+        with col3:
+            st.metric("Success Probability", f"{fix.get('success_probability', 0)*100:.0f}%")
+        
+        st.markdown(f"**Action:** {fix.get('action', 'N/A')}")
+        st.markdown(f"**Description:** {fix.get('description', 'N/A')}")
+        st.markdown(f"**Table:** `{table_name}`")
+        
+        if issue:
+            st.markdown(f"**Issue Summary:** {issue.get('issue_summary', 'N/A')}")
+            st.markdown(f"**Affected Rows:** {issue.get('affected_rows', 'N/A')}")
+        
+        # Show SQL
+        if 'sql' in fix:
+            st.markdown("**SQL to Execute:**")
+            st.code(fix['sql'], language="sql")
+        
+        st.divider()
+        
+        # Execution workflow
+        st.subheader("🎯 Execution Workflow")
+        
+        # Step 1: Dry Run
+        st.markdown("### Step 1: Dry Run (Preview Changes)")
+        st.write("Preview the rows that will be affected without making actual changes.")
+        
+        col_dry1, col_dry2 = st.columns([2, 1])
+        with col_dry1:
+            if st.button("🔍 Run Dry Run", type="secondary", key="dry_run_btn"):
+                with st.spinner("Running dry run..."):
+                    try:
+                        # Import remediator agent
+                        from dq_agents.remediator.agent import remediator_agent
+                        from google.adk.sessions import InMemorySessionService
+                        from google.adk.artifacts import InMemoryArtifactService
+                        from google.adk.runners import Runner
+                        from google.genai import types
+                        
+                        # Set up ADK components
+                        session_service = InMemorySessionService()
+                        artifact_service = InMemoryArtifactService()
+                        session = asyncio.run(session_service.create_session(
+                            app_name="DQRemediatorAgent",
+                            user_id="streamlit_user"
+                        ))
+                        
+                        # Create runner
+                        runner = Runner(
+                            app_name="DQRemediatorAgent",
+                            agent=remediator_agent,
+                            artifact_service=artifact_service,
+                            session_service=session_service,
+                        )
+                        
+                        # Build prompt for dry run
+                        prompt = f"""
+                        Perform a DRY RUN of this fix to preview affected rows without making changes.
+                        
+                        **Fix Details:**
+                        - Fix Type: {fix.get('fix_type')}
+                        - Action: {fix.get('action')}
+                        - Table: {table_name}
+                        
+                        **SQL:**
+                        {fix.get('sql')}
+                        
+                        Use the dry_run_fix() tool to preview changes. Return results in JSON format.
+                        """
+                        
+                        # Run agent
+                        content = types.Content(role="user", parts=[types.Part(text=prompt)])
+                        events = list(runner.run(
+                            user_id="streamlit_user",
+                            session_id=session.id,
+                            new_message=content
+                        ))
+                        
+                        if not events:
+                            st.error("❌ No response from Remediator Agent")
+                        else:
+                            last_event = events[-1]
+                            response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
+                            
+                            # Store dry run results
+                            st.session_state.dry_run_results = response_text
+                            st.success("✅ Dry run complete!")
+                            st.rerun()
+                    
+                    except Exception as e:
+                        st.error(f"❌ Error during dry run: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
+        
+        with col_dry2:
+            if st.button("❌ Cancel Fix", key="cancel_fix_btn"):
+                del st.session_state.approved_fix
+                if 'dry_run_results' in st.session_state:
+                    del st.session_state.dry_run_results
+                if 'execution_results' in st.session_state:
+                    del st.session_state.execution_results
+                st.warning("Fix cancelled")
+                st.rerun()
+        
+        # Display dry run results
+        if 'dry_run_results' in st.session_state:
+            st.markdown("#### 📊 Dry Run Results")
+            
+            dry_run_text = st.session_state.dry_run_results
+            
+            # Parse JSON from response
+            import re
+            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', dry_run_text)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_match = re.search(r'\{[\s\S]*\}', dry_run_text)
+                json_str = json_match.group(0) if json_match else dry_run_text
+            
+            try:
+                dry_run_result = json.loads(json_str)
+                
+                if dry_run_result.get('status') == 'success':
+                    st.info(f"✅ Dry run successful: {dry_run_result.get('affected_row_count', 0)} rows will be affected")
+                    
+                    # Show sample rows
+                    if 'sample_rows' in dry_run_result and dry_run_result['sample_rows']:
+                        st.markdown("**Sample Affected Rows:**")
+                        import pandas as pd
+                        sample_df = pd.DataFrame(dry_run_result['sample_rows'])
+                        st.dataframe(sample_df, width='stretch')
+                    
+                    # Show SQL that was used
+                    if 'dry_run_sql' in dry_run_result:
+                        with st.expander("View Dry Run SQL"):
+                            st.code(dry_run_result['dry_run_sql'], language="sql")
+                else:
+                    st.error(f"❌ Dry run failed: {dry_run_result.get('error', 'Unknown error')}")
+            
+            except json.JSONDecodeError:
+                st.markdown(dry_run_text)
+            
+            st.divider()
+            
+            # Step 2: Execute Fix
+            st.markdown("### Step 2: Execute Fix")
+            st.write("Apply the fix to the BigQuery table.")
+            
+            col_exec1, col_exec2 = st.columns(2)
+            
+            with col_exec1:
+                batch_size = st.number_input(
+                    "Batch Size (0 = all rows)",
+                    min_value=0,
+                    max_value=10000,
+                    value=0,
+                    help="Limit number of rows to update in one operation"
+                )
+            
+            with col_exec2:
+                confirm_execute = st.checkbox(
+                    "I confirm this fix is safe to execute",
+                    value=False,
+                    key="confirm_execute"
+                )
+            
+            if st.button("⚡ Execute Fix", type="primary", key="execute_btn", disabled=not confirm_execute):
+                with st.spinner("Executing fix..."):
+                    try:
+                        # Import remediator agent
+                        from dq_agents.remediator.agent import remediator_agent
+                        from google.adk.sessions import InMemorySessionService
+                        from google.adk.artifacts import InMemoryArtifactService
+                        from google.adk.runners import Runner
+                        from google.genai import types
+                        
+                        # Set up ADK components
+                        session_service = InMemorySessionService()
+                        artifact_service = InMemoryArtifactService()
+                        session = asyncio.run(session_service.create_session(
+                            app_name="DQRemediatorAgent",
+                            user_id="streamlit_user"
+                        ))
+                        
+                        # Create runner
+                        runner = Runner(
+                            app_name="DQRemediatorAgent",
+                            agent=remediator_agent,
+                            artifact_service=artifact_service,
+                            session_service=session_service,
+                        )
+                        
+                        # Build prompt for execution
+                        prompt = f"""
+                        EXECUTE this DQ fix on the BigQuery table.
+                        
+                        **Fix Details:**
+                        - Fix Type: {fix.get('fix_type')}
+                        - Action: {fix.get('action')}
+                        - Table: {table_name}
+                        - Batch Size: {batch_size}
+                        
+                        **SQL:**
+                        {fix.get('sql')}
+                        
+                        **Original DQ Rule (for validation):**
+                        {issue.get('rule', {}).get('sql', '')}
+                        
+                        **Instructions:**
+                        1. Use execute_fix() tool to apply the fix
+                        2. After execution, use validate_fix() to re-run the original DQ rule
+                        3. Return execution results and validation status in JSON format
+                        
+                        If execution fails, consider creating a JIRA ticket using create_jira_ticket().
+                        """
+                        
+                        # Run agent
+                        content = types.Content(role="user", parts=[types.Part(text=prompt)])
+                        events = list(runner.run(
+                            user_id="streamlit_user",
+                            session_id=session.id,
+                            new_message=content
+                        ))
+                        
+                        if not events:
+                            st.error("❌ No response from Remediator Agent")
+                        else:
+                            last_event = events[-1]
+                            response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
+                            
+                            # Store execution results
+                            st.session_state.execution_results = response_text
+                            st.success("✅ Execution complete!")
+                            st.rerun()
+                    
+                    except Exception as e:
+                        st.error(f"❌ Error during execution: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
+        
+        # Display execution results
+        if 'execution_results' in st.session_state:
+            st.divider()
+            st.markdown("### 🎉 Execution Results")
+            
+            exec_text = st.session_state.execution_results
+            
+            # Parse JSON from response
+            import re
+            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', exec_text)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_match = re.search(r'\{[\s\S]*\}', exec_text)
+                json_str = json_match.group(0) if json_match else exec_text
+            
+            try:
+                exec_result = json.loads(json_str)
+                
+                # Show execution status
+                if exec_result.get('execution_status') == 'success':
+                    st.success("✅ Fix executed successfully!")
+                    
+                    execution = exec_result.get('execution_results', {})
+                    st.metric("Rows Affected", execution.get('affected_rows', 'N/A'))
+                    
+                    # Show validation results
+                    if 'validation_results' in exec_result:
+                        validation = exec_result['validation_results']
+                        
+                        if validation.get('status') == 'success':
+                            st.success(f"✅ Validation passed: {validation.get('message', 'All issues resolved')}")
+                        else:
+                            st.warning(f"⚠️ Validation: {validation.get('message', 'Some issues remain')}")
+                            
+                            if validation.get('remaining_violations', 0) > 0:
+                                st.metric("Remaining Violations", validation['remaining_violations'])
+                    
+                    # Before/After comparison
+                    if 'before_after_comparison' in exec_result:
+                        with st.expander("📊 Before/After Comparison"):
+                            comparison = exec_result['before_after_comparison']
+                            st.json(comparison)
+                    
+                    # JIRA ticket if created
+                    if 'jira_ticket' in exec_result:
+                        st.divider()
+                        st.markdown("### 📋 JIRA Ticket Created")
+                        ticket = exec_result['jira_ticket'].get('ticket', {})
+                        
+                        st.info(f"Ticket {ticket.get('ticket_id', 'N/A')} created for manual follow-up")
+                        st.write(f"**Summary:** {ticket.get('summary', 'N/A')}")
+                        st.write(f"**Status:** {ticket.get('status', 'N/A')}")
+                        st.write(f"**Priority:** {ticket.get('priority', 'N/A')}")
+                
+                elif exec_result.get('execution_status') == 'failed':
+                    st.error("❌ Fix execution failed")
+                    
+                    if 'execution_results' in exec_result:
+                        st.error(exec_result['execution_results'].get('error', 'Unknown error'))
+                    
+                    # Check if JIRA ticket was created
+                    if 'jira_ticket' in exec_result:
+                        st.info("📋 JIRA ticket created for manual intervention")
+                        ticket = exec_result['jira_ticket'].get('ticket', {})
+                        st.write(f"**Ticket ID:** {ticket.get('ticket_id', 'N/A')}")
+                
+            except json.JSONDecodeError:
+                st.markdown(exec_text)
+            
+            # Option to clear and start new fix
+            if st.button("🔄 Execute Another Fix", key="new_fix_btn"):
+                del st.session_state.approved_fix
+                del st.session_state.dry_run_results
+                del st.session_state.execution_results
+                if 'treatment_analysis' in st.session_state:
+                    del st.session_state.treatment_analysis
+                st.rerun()
+
     
 with tab4:
     st.header("Metrics Agent")
