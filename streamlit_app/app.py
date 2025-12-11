@@ -477,17 +477,46 @@ if active_tab == "🤖 Orchestrator":
                         )
                         
                         content = types.Content(role="user", parts=[types.Part(text=prompt)])
-                        events = list(runner.run(
+                        
+                        # Stream events to show progress
+                        progress_placeholder = st.empty()
+                        event_count = 0
+                        all_events = []
+                        
+                        status.write("🔄 Starting orchestration...")
+                        
+                        for event in runner.run(
                             user_id="streamlit_user",
                             session_id=session.id,
                             new_message=content
-                        ))
+                        ):
+                            all_events.append(event)
+                            event_count += 1
+                            
+                            # Show progress updates
+                            if hasattr(event, 'content') and event.content and hasattr(event.content, 'parts'):
+                                for part in event.content.parts:
+                                    if hasattr(part, 'text') and part.text:
+                                        # Extract phase from text
+                                        text_snippet = part.text[:150]
+                                        if "identifier" in text_snippet.lower():
+                                            progress_placeholder.info("📋 Phase 1: Detecting issues...")
+                                        elif "treatment" in text_snippet.lower():
+                                            progress_placeholder.info("💊 Phase 2: Analyzing fixes...")
+                                        elif "remediator" in text_snippet.lower():
+                                            progress_placeholder.info("🔧 Phase 3: Applying fixes...")
+                                        elif "metrics" in text_snippet.lower():
+                                            progress_placeholder.info("📊 Phase 4: Calculating costs...")
+                                        
+                                        # Show snippet in status
+                                        status.write(f"🤖 Event {event_count}: {text_snippet}...")
                         
-                        if events:
-                            last_event = events[-1]
+                        if all_events:
+                            last_event = all_events[-1]
                             response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
                             
                             st.session_state.orchestrator_output = response_text
+                            progress_placeholder.empty()
                             status.update(label="✅ Workflow completed!", state="complete", expanded=False)
                             st.rerun()
                         else:
@@ -542,17 +571,35 @@ if active_tab == "🤖 Orchestrator":
                             )
                             
                             content = types.Content(role="user", parts=[types.Part(text=nl_request)])
-                            events = list(runner.run(
+                            
+                            # Stream events to show progress
+                            progress_placeholder = st.empty()
+                            event_count = 0
+                            all_events = []
+                            
+                            status.write("🔄 Processing your request...")
+                            
+                            for event in runner.run(
                                 user_id="streamlit_user",
                                 session_id=session.id,
                                 new_message=content
-                            ))
+                            ):
+                                all_events.append(event)
+                                event_count += 1
+                                
+                                # Show progress updates
+                                if hasattr(event, 'content') and event.content and hasattr(event.content, 'parts'):
+                                    for part in event.content.parts:
+                                        if hasattr(part, 'text') and part.text:
+                                            text_snippet = part.text[:150]
+                                            status.write(f"🤖 {text_snippet}...")
                             
-                            if events:
-                                last_event = events[-1]
+                            if all_events:
+                                last_event = all_events[-1]
                                 response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
                                 
                                 st.session_state.orchestrator_output = response_text
+                                progress_placeholder.empty()
                                 status.update(label="✅ Request completed!", state="complete", expanded=False)
                                 st.rerun()
                             else:
@@ -1314,30 +1361,25 @@ elif active_tab == "💊 Treatment":
                             
                             # Use the same logic as execution
                             sql_preview = rule_sql.strip().replace('`', '')
+                            
+                            # Use regex to replace ALL table references in PROJECT.DATASET pattern
+                            import re
+                            
+                            # Pattern to match PROJECT.DATASET.any_table_name (case insensitive)
+                            def replace_table_ref(match):
+                                matched_table = match.group(1)
+                                return f"`{project_id_preview}.{dataset_id_preview}.{matched_table}`"
+                            
+                            # Replace PROJECT.DATASET.table_name patterns
+                            sql_preview = re.sub(r'PROJECT\.DATASET\.([a-zA-Z_][a-zA-Z0-9_]*)', replace_table_ref, sql_preview, flags=re.IGNORECASE)
+                            
+                            # Also handle TABLE_NAME placeholder if it wasn't caught
                             full_table_ref = f"{project_id_preview}.{dataset_id_preview}.{table_name}"
+                            sql_preview = sql_preview.replace('TABLE_NAME', table_name)
                             
-                            # Replace all possible placeholder patterns (order matters)
-                            placeholder_patterns = [
-                                (f"PROJECT.DATASET.{table_name}", full_table_ref),
-                                (f"project.dataset.{table_name}", full_table_ref),
-                                ("PROJECT.DATASET.TABLE_NAME", full_table_ref),
-                                ("project.dataset.TABLE_NAME", full_table_ref),
-                                ("PROJECT.DATASET", f"{project_id_preview}.{dataset_id_preview}"),
-                                ("project.dataset", f"{project_id_preview}.{dataset_id_preview}"),
-                                ("{table}", full_table_ref),
-                                ("{TABLE}", full_table_ref),
-                                ("{table_name}", full_table_ref),
-                                ("{TABLE_NAME}", full_table_ref),
-                                ("TABLE_NAME", full_table_ref),
-                                ("$table", full_table_ref),
-                                ("${table}", full_table_ref),
-                            ]
-                            
-                            for old_pattern, new_pattern in placeholder_patterns:
-                                sql_preview = sql_preview.replace(old_pattern, new_pattern)
-                            
-                            # Add backticks
-                            sql_preview = sql_preview.replace(full_table_ref, f"`{full_table_ref}`")
+                            # Ensure the main table is also backticked if not already
+                            if full_table_ref in sql_preview and f"`{full_table_ref}`" not in sql_preview:
+                                sql_preview = sql_preview.replace(full_table_ref, f"`{full_table_ref}`")
                             
                             st.markdown(f"**{rule.get('name', 'Unknown')}**")
                             st.code(sql_preview, language='sql')
@@ -1416,29 +1458,28 @@ elif active_tab == "💊 Treatment":
                                 # Remove any existing backticks from the SQL first to avoid double-backticking
                                 sql = sql.replace('`', '')
                                 
-                                # Replace all possible placeholder patterns
-                                # Order matters: replace more specific patterns first
-                                placeholder_patterns = [
-                                    (f"PROJECT.DATASET.{table_name}", full_table_ref),
-                                    (f"project.dataset.{table_name}", full_table_ref),
-                                    ("PROJECT.DATASET.TABLE_NAME", full_table_ref),
-                                    ("project.dataset.TABLE_NAME", full_table_ref),
-                                    ("PROJECT.DATASET", f"{project_id}.{dataset_id}"),
-                                    ("project.dataset", f"{project_id}.{dataset_id}"),
-                                    ("{table}", full_table_ref),
-                                    ("{TABLE}", full_table_ref),
-                                    ("{table_name}", full_table_ref),
-                                    ("{TABLE_NAME}", full_table_ref),
-                                    ("TABLE_NAME", full_table_ref),
-                                    ("$table", full_table_ref),
-                                    ("${table}", full_table_ref),
-                                ]
+                                # Use regex to replace ALL table references in PROJECT.DATASET pattern
+                                import re
                                 
-                                for old_pattern, new_pattern in placeholder_patterns:
-                                    sql = sql.replace(old_pattern, new_pattern)
+                                # Pattern to match PROJECT.DATASET.any_table_name (case insensitive)
+                                def replace_table_ref_exec(match):
+                                    matched_table = match.group(1)
+                                    return f"`{project_id}.{dataset_id}.{matched_table}`"
                                 
-                                # Now add backticks around all occurrences of the full table reference
-                                sql = sql.replace(full_table_ref, f"`{full_table_ref}`")
+                                # Replace PROJECT.DATASET.table_name patterns (handles cross-table queries)
+                                sql = re.sub(r'PROJECT\.DATASET\.([a-zA-Z_][a-zA-Z0-9_]*)', replace_table_ref_exec, sql, flags=re.IGNORECASE)
+                                
+                                # Handle {TABLE_NAME} placeholder (common template format)
+                                if '{TABLE_NAME}' in sql:
+                                    sql = sql.replace('{TABLE_NAME}', f"`{full_table_ref}`")
+                                
+                                # Also handle simple TABLE_NAME placeholder if it wasn't caught
+                                if 'TABLE_NAME' in sql:
+                                    sql = sql.replace('TABLE_NAME', f"`{full_table_ref}`")
+                                
+                                # Ensure the main table is also backticked if not already
+                                if full_table_ref in sql and f"`{full_table_ref}`" not in sql:
+                                    sql = sql.replace(full_table_ref, f"`{full_table_ref}`")
                                 
                                 # Validate SQL has basic structure
                                 if 'SELECT' not in sql.upper():
@@ -2192,7 +2233,10 @@ Call dry_run_fix() now and return the result.
                         help="Review the fix details and dry run results (if available) before confirming"
                     )
                 
-                execute_disabled = not confirm_execute or (not skip_dry_run and 'dry_run_results' not in st.session_state)
+                # Allow execution if: user confirmed AND (dry run was skipped OR dry run results exist)
+                can_proceed = skip_dry_run or 'dry_run_results' in st.session_state
+                execute_disabled = not (confirm_execute and can_proceed)
+                
                 if st.button("⚡ Execute Fix", type="primary", key="execute_btn", disabled=execute_disabled):
                     with st.status("Executing fix...", expanded=True) as status:
                         try:
@@ -2368,298 +2412,772 @@ Call dry_run_fix() now and return the result.
 
     
 elif active_tab == "📊 Metrics":
-    st.markdown("**Comprehensive DQ Analytics, Cost of Inaction & Anomaly Detection**")
+    # =====================================================
+    # REVAMPED METRICS DASHBOARD - User-Friendly & Visual
+    # =====================================================
     
-    # Mode selection
-    metrics_mode = st.radio(
-        "Analysis Mode",
-        ["📈 Dashboard Overview", "🔍 Anomaly Detection", "💰 Cost of Inaction", "📝 Executive Report"],
-        horizontal=True,
-        help="Choose the type of analysis to view"
-    )
+    # Add custom CSS for animations and styling
+    st.markdown("""
+    <style>
+    /* Animated gradient background for metric cards */
+    .metric-card {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        border-radius: 16px;
+        padding: 20px;
+        margin: 10px 0;
+        border: 1px solid #4da6ff33;
+        box-shadow: 0 4px 20px rgba(77, 166, 255, 0.15);
+        transition: all 0.3s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 30px rgba(77, 166, 255, 0.25);
+        border-color: #4da6ff;
+    }
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        background: linear-gradient(90deg, #4da6ff, #00d4aa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: pulse 2s infinite;
+    }
+    .metric-label {
+        font-size: 0.9rem;
+        color: #a0a0a0;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 5px;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.8; }
+    }
+    
+    /* Insight cards with icons */
+    .insight-card {
+        background: linear-gradient(135deg, #1e3a5f 0%, #162447 100%);
+        border-radius: 12px;
+        padding: 16px;
+        margin: 8px 0;
+        border-left: 4px solid #4da6ff;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    .insight-icon {
+        font-size: 2rem;
+    }
+    .insight-text {
+        color: #e0e0e0;
+        font-size: 1rem;
+    }
+    
+    /* Chat interface styling */
+    .chat-container {
+        background: #1a1a2e;
+        border-radius: 16px;
+        padding: 20px;
+        border: 1px solid #4da6ff33;
+    }
+    .chat-message-user {
+        background: linear-gradient(135deg, #4da6ff 0%, #0066cc 100%);
+        color: white;
+        padding: 12px 18px;
+        border-radius: 18px 18px 4px 18px;
+        margin: 8px 0;
+        max-width: 80%;
+        margin-left: auto;
+    }
+    .chat-message-ai {
+        background: #2d2d44;
+        color: #e0e0e0;
+        padding: 12px 18px;
+        border-radius: 18px 18px 18px 4px;
+        margin: 8px 0;
+        max-width: 80%;
+    }
+    
+    /* Summary card styling */
+    .summary-card {
+        background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 100%);
+        border-radius: 20px;
+        padding: 25px;
+        margin: 15px 0;
+        border: 1px solid rgba(77, 166, 255, 0.2);
+    }
+    .summary-title {
+        font-size: 1.2rem;
+        color: #4da6ff;
+        margin-bottom: 15px;
+        font-weight: 600;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Initialize chat history
+    if 'metrics_chat_history' not in st.session_state:
+        st.session_state.metrics_chat_history = []
+    
+    # ===== TOP NAVIGATION - Simple Mode Selection =====
+    st.markdown("### Choose What You'd Like to See")
+    
+    mode_cols = st.columns(4)
+    with mode_cols[0]:
+        dashboard_btn = st.button("📊 Dashboard", use_container_width=True, type="primary" if st.session_state.get('metrics_view', 'dashboard') == 'dashboard' else "secondary")
+        if dashboard_btn:
+            st.session_state.metrics_view = 'dashboard'
+            st.rerun()
+    with mode_cols[1]:
+        chat_btn = st.button("💬 Ask Questions", use_container_width=True, type="primary" if st.session_state.get('metrics_view') == 'chat' else "secondary")
+        if chat_btn:
+            st.session_state.metrics_view = 'chat'
+            st.rerun()
+    with mode_cols[2]:
+        insights_btn = st.button("💡 Smart Insights", use_container_width=True, type="primary" if st.session_state.get('metrics_view') == 'insights' else "secondary")
+        if insights_btn:
+            st.session_state.metrics_view = 'insights'
+            st.rerun()
+    with mode_cols[3]:
+        report_btn = st.button("📄 Generate Report", use_container_width=True, type="primary" if st.session_state.get('metrics_view') == 'report' else "secondary")
+        if report_btn:
+            st.session_state.metrics_view = 'report'
+            st.rerun()
     
     st.divider()
     
-    # ===== DASHBOARD OVERVIEW MODE =====
-    if metrics_mode == "📈 Dashboard Overview":
-        with st.container():
-            st.subheader("Dashboard Overview")
+    # Default to dashboard
+    current_view = st.session_state.get('metrics_view', 'dashboard')
+    
+    # Helper function to get data summary
+    def get_data_summary():
+        """Get summary of available data for analysis"""
+        summary = {
+            'has_issues': 'filtered_issues' in st.session_state and st.session_state.filtered_issues,
+            'total_violations': 0,
+            'total_issues': 0,
+            'tables': [],
+            'severity_breakdown': {},
+            'dimension_breakdown': {}
+        }
+        
+        if summary['has_issues']:
+            issues = st.session_state.filtered_issues
+            summary['total_issues'] = len(issues)
+            summary['total_violations'] = sum(issue.get('total_count', 0) for issue in issues)
             
-            # Independent operation mode
-            col_mode1, col_mode2 = st.columns([3, 1])
-            with col_mode1:
-                operation_mode = st.radio(
-                    "Data Source",
-                    ["From Treatment Agent", "Independent Analysis"],
-                    horizontal=True,
-                    help="Use data from Treatment Agent or perform independent analysis"
+            for issue in issues:
+                table = issue.get('table', 'unknown')
+                if table not in summary['tables']:
+                    summary['tables'].append(table)
+                
+                sev = issue.get('severity', 'unknown')
+                summary['severity_breakdown'][sev] = summary['severity_breakdown'].get(sev, 0) + 1
+                
+                dim = issue.get('dq_dimension', 'unknown')
+                summary['dimension_breakdown'][dim] = summary['dimension_breakdown'].get(dim, 0) + issue.get('total_count', 0)
+        
+        return summary
+    
+    # ===== DASHBOARD VIEW =====
+    if current_view == 'dashboard':
+        data_summary = get_data_summary()
+        
+        # Hero Section - Data Quality Health Score
+        st.markdown("## 🏥 Your Data Quality Health")
+        
+        if data_summary['has_issues']:
+            # Calculate health score
+            total_violations = data_summary['total_violations']
+            critical_count = data_summary['severity_breakdown'].get('critical', 0)
+            high_count = data_summary['severity_breakdown'].get('high', 0)
+            
+            # Health score formula: 100 - penalties
+            health_score = max(0, 100 - (critical_count * 15) - (high_count * 5) - (data_summary['total_issues'] * 2))
+            health_score = min(100, health_score)
+            
+            # Determine status
+            if health_score >= 80:
+                status_emoji = "✅"
+                status_text = "Excellent"
+                status_color = "#00d4aa"
+            elif health_score >= 60:
+                status_emoji = "⚠️"
+                status_text = "Needs Attention"
+                status_color = "#ffc107"
+            else:
+                status_emoji = "🚨"
+                status_text = "Critical Issues"
+                status_color = "#ff4757"
+            
+            # Health Score Display with Gauge
+            col_health, col_summary = st.columns([1, 2])
+            
+            with col_health:
+                import plotly.graph_objects as go
+                
+                # Create animated gauge chart
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=health_score,
+                    domain={'x': [0, 1], 'y': [0, 1]},
+                    title={'text': "Health Score", 'font': {'size': 20, 'color': '#e0e0e0'}},
+                    number={'font': {'size': 50, 'color': status_color}},
+                    gauge={
+                        'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#666"},
+                        'bar': {'color': status_color, 'thickness': 0.3},
+                        'bgcolor': "#2d2d44",
+                        'borderwidth': 2,
+                        'bordercolor': "rgba(77, 166, 255, 0.2)",
+                        'steps': [
+                            {'range': [0, 40], 'color': 'rgba(255,71,87,0.3)'},
+                            {'range': [40, 70], 'color': 'rgba(255,193,7,0.3)'},
+                            {'range': [70, 100], 'color': 'rgba(0,212,170,0.3)'}
+                        ],
+                        'threshold': {
+                            'line': {'color': "#ffffff", 'width': 4},
+                            'thickness': 0.75,
+                            'value': health_score
+                        }
+                    }
+                ))
+                
+                fig_gauge.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    height=250,
+                    margin=dict(l=20, r=20, t=50, b=20)
                 )
+                
+                st.plotly_chart(fig_gauge, use_container_width=True, key="health_gauge")
+                st.markdown(f"<p style='text-align:center; font-size: 1.2rem;'>{status_emoji} {status_text}</p>", unsafe_allow_html=True)
             
-            # Check if we have issues data from treatment agent
-            has_treatment_data = 'filtered_issues' in st.session_state and st.session_state.filtered_issues
+            with col_summary:
+                st.markdown("### 📌 Quick Summary")
+                st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 20px; border-radius: 12px; border: 1px solid #4da6ff33;'>
+                    <p style='font-size: 1.1rem; color: #e0e0e0; margin-bottom: 15px;'>
+                        We found <strong style='color: #4da6ff;'>{data_summary['total_violations']:,}</strong> data quality issues 
+                        across <strong style='color: #4da6ff;'>{len(data_summary['tables'])}</strong> table(s).
+                    </p>
+                    <p style='font-size: 1rem; color: #a0a0a0;'>
+                        {"🔴 " + str(critical_count) + " critical issues need immediate attention!" if critical_count > 0 else "✅ No critical issues found."}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Quick stats in a row
+                stat_cols = st.columns(3)
+                with stat_cols[0]:
+                    st.metric("📋 Total Issues", f"{data_summary['total_issues']}")
+                with stat_cols[1]:
+                    st.metric("⚠️ High Priority", f"{critical_count + high_count}")
+                with stat_cols[2]:
+                    st.metric("📊 Tables Affected", len(data_summary['tables']))
             
-            if operation_mode == "From Treatment Agent" and not has_treatment_data:
-                st.info("👆 Run DQ rules in the Treatment tab first to see metrics from that workflow")
-                
-                # Show sample metrics for demonstration
-                with st.expander("📊 View Sample Metrics (Demo Data)"):
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        st.metric("Total Issues", "127", delta="-23", delta_color="inverse")
-                    with col2:
-                        st.metric("Auto-Fix Rate", "85%", delta="5%")
-                    with col3:
-                        st.metric("Avg Resolution Time", "2.3h", delta="-0.5h", delta_color="inverse")
-                    with col4:
-                        st.metric("Cost of Inaction", "GBP 52K/mo", delta="-8K")
-                    
-                    st.info("💡 This shows sample data. Switch to 'Independent Analysis' to run metrics on any table.")
+            st.divider()
             
-            elif operation_mode == "Independent Analysis":
-                # Standalone metrics analysis
-                st.markdown("**Analyze specific tables independently**")
-                
-                available_tables = st.session_state.get('available_tables', [])
-                if not available_tables:
-                    st.error("❌ No tables found. Run `python init_environment.py` to initialize.")
-                    available_tables = ["policies_week1"]  # Fallback
-                
-                selected_tables = st.multiselect(
-                    "Select tables to analyze",
-                    available_tables,
-                    default=[available_tables[0]] if available_tables else [],
-                    help="Choose one or more tables for independent metrics analysis"
-                )
-                
-                if st.button("📊 Generate Metrics Dashboard", key="ind_metrics"):
-                    with st.status("🤖 Analyzing selected tables...", expanded=True) as status:
-                        try:
-                            from google.cloud import bigquery
-                            
-                            project_id = st.session_state.get('project_id', '')
-                            dataset_id = st.session_state.get('dataset_id', '')
-                            
-                            if not project_id or not dataset_id:
-                                st.error("⚠️ Please configure GCP Project and Dataset in the sidebar first")
-                                status.update(label="⚠️ Configuration missing", state="error")
-                            else:
-                                client = bigquery.Client(project=project_id)
-                                
-                                # Collect basic stats
-                                total_rows = 0
-                                null_counts = {}
-                                
-                                for table in selected_tables:
-                                    query = f"""
-                                    SELECT COUNT(*) as total_rows
-                                    FROM `{project_id}.{dataset_id}.{table}`
-                                    """
-                                    results = client.query(query).result()
-                                    for row in results:
-                                        total_rows += row.total_rows
-                                
-                                st.session_state.independent_metrics = {
-                                    'total_rows': total_rows,
-                                    'tables_analyzed': selected_tables,
-                                    'timestamp': datetime.now().isoformat()
-                                }
-                                
-                                status.update(label=f"✅ Analyzed {len(selected_tables)} tables with {total_rows:,} total rows", state="complete", expanded=False)
-                                st.rerun()
-                        
-                        except Exception as e:
-                            status.update(label="❌ Error during analysis", state="error")
-                            st.error(f"❌ Error: {str(e)}")
-                
-                # Display independent metrics if available
-                if 'independent_metrics' in st.session_state:
-                    ind_metrics = st.session_state.independent_metrics
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Total Rows", f"{ind_metrics['total_rows']:,}")
-                    with col2:
-                        st.metric("Tables Analyzed", len(ind_metrics['tables_analyzed']))
-                    with col3:
-                        st.metric("Data Quality Score", "87%", help="Estimated based on profiling")
-                    with col4:
-                        st.metric("Tables", ", ".join(ind_metrics['tables_analyzed'][:2]) + "...")
-                    
-                    st.info("💡 Use 'Anomaly Detection' mode for detailed outlier analysis across these tables")
+            # Interactive Charts Section
+            st.markdown("## 📈 Visual Analytics")
             
-            elif has_treatment_data:
-                # Real metrics from session state
-                issues = st.session_state.filtered_issues
-                total_violations = sum(issue.get('total_count', 0) for issue in issues)
+            chart_col1, chart_col2 = st.columns(2)
+            
+            with chart_col1:
+                # Animated Pie Chart - Issues by Severity
+                st.markdown("### Issues by Severity")
                 
-                # Top metrics cards
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric(
-                        "Total Violations",
-                        f"{total_violations:,}",
-                        help="Total number of DQ violations detected"
-                    )
-                
-                with col2:
-                    # Calculate auto-fix rate from approved fixes
-                    auto_fixed = sum(1 for key in st.session_state.keys() if key.startswith('approved_fix'))
-                    auto_fix_rate = (auto_fixed / len(issues) * 100) if len(issues) > 0 else 0
-                    st.metric(
-                        "Auto-Fix Rate",
-                        f"{auto_fix_rate:.1f}%",
-                        delta=f"{auto_fix_rate - 80:.1f}%" if auto_fix_rate != 80 else "0%",
-                        help="Percentage of issues resolved automatically (Target: >80%)"
-                    )
-                
-                with col3:
-                    # Calculate average severity
-                    severity_map = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
-                    avg_severity = sum(severity_map.get(issue.get('severity', 'low'), 1) for issue in issues) / len(issues) if issues else 0
-                    severity_label = 'Critical' if avg_severity > 3.5 else 'High' if avg_severity > 2.5 else 'Medium' if avg_severity > 1.5 else 'Low'
-                    st.metric(
-                        "Avg Severity",
-                        severity_label,
-                        help="Average severity of detected issues"
-                    )
-                
-                with col4:
-                    # Estimate affected policy value
-                    # Use first table name from issues or first available table
-                    available_tables = st.session_state.get('available_tables', ['policies_week1'])
-                    table_name = issues[0].get('table', available_tables[0]) if issues else available_tables[0]
-                    avg_policy_value = 50000  # Default estimate
-                    exposure = total_violations * avg_policy_value
-                    st.metric(
-                        "Exposure",
-                        f"GBP {exposure/1000000:.1f}M",
-                        help="Total policy value affected by DQ issues"
-                    )
-                
-                st.divider()
-                
-                # Issues by DQ Dimension
-                st.subheader("Issues by Data Quality Dimension")
-                
-                dimension_counts = {}
-                for issue in issues:
-                    dim = issue.get('dq_dimension', 'Unknown')
-                    count = issue.get('total_count', 0)
-                    dimension_counts[dim] = dimension_counts.get(dim, 0) + count
-                
-                if dimension_counts:
-                    import plotly.express as px
-                    
-                    dim_df = pd.DataFrame([
-                        {'Dimension': k, 'Violations': v} 
-                        for k, v in dimension_counts.items()
-                    ])
-                    
-                    fig = px.bar(
-                        dim_df,
-                        x='Dimension',
-                        y='Violations',
-                        title='Violations by DQ Dimension',
-                        color='Dimension',
-                        labels={'Violations': 'Number of Violations'},
-                        height=400
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                # Issues by Severity
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Issues by Severity")
-                    severity_counts = {}
-                    for issue in issues:
-                        sev = issue.get('severity', 'unknown')
-                        severity_counts[sev] = severity_counts.get(sev, 0) + 1
-                    
-                    if severity_counts:
-                        fig_sev = px.pie(
-                            values=list(severity_counts.values()),
-                            names=list(severity_counts.keys()),
-                            title='Distribution by Severity',
-                            color_discrete_map={
-                                'critical': '#ff4444',
-                                'high': '#ff8800',
-                                'medium': '#ffcc00',
-                                'low': '#44ff44'
-                            }
-                        )
-                        st.plotly_chart(fig_sev, use_container_width=True)
-                
-                with col2:
-                    st.subheader("Remediation Status")
-                    
-                    # Calculate status
-                    resolved = auto_fixed
-                    pending = len(issues) - resolved
-                    
-                    status_data = {
-                        'Status': ['Resolved', 'Pending', 'In Progress'],
-                        'Count': [resolved, pending, 0]
+                severity_data = data_summary['severity_breakdown']
+                if severity_data:
+                    colors = {
+                        'critical': '#ff4757',
+                        'high': '#ffa502',
+                        'medium': '#ffc107',
+                        'low': '#2ed573'
                     }
                     
-                    fig_status = px.pie(
-                        values=status_data['Count'],
-                        names=status_data['Status'],
-                        title='Resolution Status',
-                        color_discrete_map={
-                            'Resolved': '#44ff44',
-                            'Pending': '#ffcc00',
-                            'In Progress': '#0088ff'
-                        }
+                    fig_severity = go.Figure(data=[go.Pie(
+                        labels=list(severity_data.keys()),
+                        values=list(severity_data.values()),
+                        hole=0.5,
+                        marker_colors=[colors.get(s, '#666') for s in severity_data.keys()],
+                        textinfo='label+percent',
+                        textfont_size=14,
+                        pull=[0.1 if s == 'critical' else 0 for s in severity_data.keys()]
+                    )])
+                    
+                    fig_severity.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        showlegend=True,
+                        legend=dict(font=dict(color='#e0e0e0')),
+                        height=350,
+                        margin=dict(l=20, r=20, t=20, b=20)
                     )
-                    st.plotly_chart(fig_status, use_container_width=True)
-    
-    # ===== ANOMALY DETECTION MODE =====
-    elif metrics_mode == "🔍 Anomaly Detection":
-        with st.container():
-            st.subheader("Anomaly Detection")
-            st.markdown("Use **IsolationForest** ML algorithm to detect outliers in policy data")
+                    
+                    st.plotly_chart(fig_severity, use_container_width=True, key="severity_pie")
             
-            # Detection scope
-            detection_scope = st.radio(
-                "Detection Scope",
-                ["Single Table", "Cross-Table Analysis"],
-                horizontal=True,
-                help="Analyze one table or detect patterns across multiple tables"
-            )
+            with chart_col2:
+                # Animated Bar Chart - Issues by Dimension
+                st.markdown("### Issues by Category")
+                
+                dimension_data = data_summary['dimension_breakdown']
+                if dimension_data:
+                    # Sort by count
+                    sorted_dims = sorted(dimension_data.items(), key=lambda x: x[1], reverse=True)
+                    dims = [d[0] for d in sorted_dims]
+                    counts = [d[1] for d in sorted_dims]
+                    
+                    fig_dims = go.Figure(data=[go.Bar(
+                        x=counts,
+                        y=dims,
+                        orientation='h',
+                        marker=dict(
+                            color=counts,
+                            colorscale=[[0, '#4da6ff'], [0.5, '#00d4aa'], [1, '#ff6b6b']],
+                            line=dict(width=0)
+                        ),
+                        text=counts,
+                        textposition='outside',
+                        textfont=dict(color='#e0e0e0')
+                    )])
+                    
+                    fig_dims.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        xaxis=dict(title='Number of Violations', color='#a0a0a0', gridcolor='#333'),
+                        yaxis=dict(title='', color='#e0e0e0'),
+                        height=350,
+                        margin=dict(l=20, r=80, t=20, b=40)
+                    )
+                    
+                    st.plotly_chart(fig_dims, use_container_width=True, key="dimension_bar")
             
-            if detection_scope == "Single Table":
-                # Table selection
+            # Trend Analysis (if multiple tables)
+            if len(data_summary['tables']) > 1:
+                st.markdown("### 📊 Issues Across Tables")
+                
+                # Group issues by table
+                table_issues = {}
+                for issue in st.session_state.filtered_issues:
+                    table = issue.get('table', 'unknown')
+                    table_issues[table] = table_issues.get(table, 0) + issue.get('total_count', 0)
+                
+                fig_tables = go.Figure(data=[go.Bar(
+                    x=list(table_issues.keys()),
+                    y=list(table_issues.values()),
+                    marker=dict(
+                        color=list(table_issues.values()),
+                        colorscale='Blues',
+                        line=dict(width=2, color='#4da6ff')
+                    ),
+                    text=list(table_issues.values()),
+                    textposition='outside',
+                    textfont=dict(color='#e0e0e0', size=14)
+                )])
+                
+                fig_tables.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(title='Table', color='#a0a0a0', gridcolor='#333'),
+                    yaxis=dict(title='Total Violations', color='#a0a0a0', gridcolor='#333'),
+                    height=300,
+                    margin=dict(l=40, r=40, t=40, b=40)
+                )
+                
+                st.plotly_chart(fig_tables, use_container_width=True, key="table_comparison")
+        
+        else:
+            # No data - show welcome state with options to get started
+            st.markdown("""
+            <div style='text-align: center; padding: 40px 20px;'>
+                <div style='font-size: 4rem; margin-bottom: 20px;'>📊</div>
+                <h2 style='color: #4da6ff; margin-bottom: 15px;'>Welcome to Metrics Dashboard</h2>
+                <p style='color: #a0a0a0; font-size: 1.1rem; max-width: 600px; margin: 0 auto;'>
+                    Choose an option below to get started - you can run analysis directly or use demo data.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.divider()
+            
+            # Two column layout for options
+            opt_col1, opt_col2 = st.columns(2)
+            
+            with opt_col1:
+                st.markdown("### 🔍 Run Quick Analysis")
+                st.markdown("*Analyze your tables directly without previous steps*")
+                
+                # Get available tables
                 available_tables = st.session_state.get('available_tables', [])
                 if not available_tables:
-                    st.error("❌ No tables found. Run `python init_environment.py` to initialize.")
-                    available_tables = ["policies_week1"]  # Fallback
+                    # Try to fetch from BigQuery
+                    try:
+                        from google.cloud import bigquery
+                        project_id = st.session_state.get('project_id', '')
+                        dataset_id = st.session_state.get('dataset_id', '')
+                        if project_id and dataset_id:
+                            client = bigquery.Client(project=project_id)
+                            tables = list(client.list_tables(f"{project_id}.{dataset_id}"))
+                            available_tables = [t.table_id for t in tables]
+                            st.session_state.available_tables = available_tables
+                    except:
+                        available_tables = ['policies_week1', 'policies_week2', 'policies_week3', 'policies_week4']
                 
-                table_to_analyze = st.selectbox(
-                    "Select table for anomaly detection",
-                    available_tables,
-                    help="Choose which table to analyze for anomalies"
-                )
+                if available_tables:
+                    selected_tables = st.multiselect(
+                        "Select tables to analyze",
+                        available_tables,
+                        default=[available_tables[0]] if available_tables else [],
+                        key="quick_analysis_tables"
+                    )
+                    
+                    if st.button("🚀 Run Quick Analysis", use_container_width=True, type="primary", disabled=not selected_tables):
+                        with st.spinner("🔍 Analyzing tables for data quality issues..."):
+                            try:
+                                from google.cloud import bigquery
+                                project_id = st.session_state.get('project_id', '')
+                                dataset_id = st.session_state.get('dataset_id', '')
+                                client = bigquery.Client(project=project_id)
+                                
+                                # Run basic DQ analysis on selected tables
+                                quick_issues = []
+                                for table in selected_tables:
+                                    # Check for NULL values in key columns
+                                    schema_query = f"SELECT column_name, data_type FROM `{project_id}.{dataset_id}.INFORMATION_SCHEMA.COLUMNS` WHERE table_name = '{table}'"
+                                    schema_df = client.query(schema_query).to_dataframe()
+                                    
+                                    for _, row in schema_df.iterrows():
+                                        col_name = row['column_name']
+                                        # Check NULL count
+                                        null_query = f"SELECT COUNT(*) as null_count FROM `{project_id}.{dataset_id}.{table}` WHERE {col_name} IS NULL"
+                                        try:
+                                            null_result = client.query(null_query).to_dataframe()
+                                            null_count = null_result['null_count'].iloc[0]
+                                            if null_count > 0:
+                                                severity = 'critical' if null_count > 100 else 'high' if null_count > 50 else 'medium' if null_count > 10 else 'low'
+                                                quick_issues.append({
+                                                    'table': table,
+                                                    'severity': severity,
+                                                    'total_count': int(null_count),
+                                                    'dq_dimension': 'Completeness',
+                                                    'rule_name': f'{col_name}_null_check',
+                                                    'column': col_name
+                                                })
+                                        except:
+                                            pass
+                                
+                                if quick_issues:
+                                    # Take top issues to avoid overwhelming
+                                    quick_issues = sorted(quick_issues, key=lambda x: x['total_count'], reverse=True)[:20]
+                                    st.session_state.filtered_issues = quick_issues
+                                    st.success(f"✅ Found {len(quick_issues)} data quality issues!")
+                                    st.rerun()
+                                else:
+                                    st.info("✨ No obvious data quality issues found! Your data looks clean.")
+                                    
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                                st.info("💡 Make sure you've configured GCP Project and Dataset in the sidebar.")
+                else:
+                    st.warning("⚠️ Configure your GCP Project and Dataset in the sidebar first.")
+            
+            with opt_col2:
+                st.markdown("### 🎯 Use Demo Data")
+                st.markdown("*Try the dashboard with sample data*")
                 
-                tables_to_analyze = [table_to_analyze]
-            else:
-                # Multi-table selection
-                tables_to_analyze = st.multiselect(
-                    "Select tables for cross-table anomaly detection",
-                    ["policies_week1", "policies_week2", "policies_week3", "policies_week4"],
-                    default=["policies_week1", "policies_week2", "policies_week3", "policies_week4"],
-                    help="Detect anomalies that appear consistently across multiple weeks"
-                )
+                st.markdown("""
+                <div style='background: rgba(77, 166, 255, 0.1); padding: 15px; border-radius: 10px; margin: 10px 0;'>
+                    <p style='color: #a0a0a0; margin: 0;'>Demo includes:</p>
+                    <ul style='color: #e0e0e0; margin: 10px 0;'>
+                        <li>5 sample DQ issues</li>
+                        <li>Multiple severity levels</li>
+                        <li>Various DQ dimensions</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button("🎯 Load Demo Dashboard", use_container_width=True):
+                    # Create demo data
+                    st.session_state.filtered_issues = [
+                        {'table': 'policies_week1', 'severity': 'critical', 'total_count': 45, 'dq_dimension': 'Completeness', 'rule_name': 'null_check'},
+                        {'table': 'policies_week1', 'severity': 'high', 'total_count': 123, 'dq_dimension': 'Validity', 'rule_name': 'date_format'},
+                        {'table': 'policies_week2', 'severity': 'medium', 'total_count': 67, 'dq_dimension': 'Accuracy', 'rule_name': 'range_check'},
+                        {'table': 'policies_week1', 'severity': 'low', 'total_count': 234, 'dq_dimension': 'Consistency', 'rule_name': 'cross_ref'},
+                        {'table': 'policies_week2', 'severity': 'high', 'total_count': 89, 'dq_dimension': 'Timeliness', 'rule_name': 'stale_data'},
+                    ]
+                    st.rerun()
+    
+    # ===== CHAT VIEW - Natural Language Analysis =====
+    elif current_view == 'chat':
+        st.markdown("## 💬 Ask Me Anything About Your Data")
+        st.markdown("*I can help you understand your data quality issues in plain English*")
+        
+        # Chat container
+        chat_container = st.container()
+        
+        # Suggested questions
+        st.markdown("### 💡 Try asking:")
+        suggestion_cols = st.columns(2)
+        
+        suggestions = [
+            "What are my biggest data quality problems?",
+            "How much money could bad data cost us?",
+            "Which table needs the most attention?",
+            "What should I fix first?",
+            "Give me a summary for my manager",
+            "Are there any patterns in the issues?"
+        ]
+        
+        for i, suggestion in enumerate(suggestions):
+            col_idx = i % 2
+            with suggestion_cols[col_idx]:
+                if st.button(f"💭 {suggestion}", key=f"suggest_{i}", use_container_width=True):
+                    st.session_state.metrics_chat_input = suggestion
+                    st.rerun()
+        
+        st.divider()
+        
+        # Display chat history
+        with chat_container:
+            for msg in st.session_state.metrics_chat_history:
+                if msg['role'] == 'user':
+                    st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, #4da6ff 0%, #0066cc 100%); color: white; 
+                                padding: 12px 18px; border-radius: 18px 18px 4px 18px; margin: 8px 0; 
+                                max-width: 80%; margin-left: auto;'>
+                        {msg['content']}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='background: #2d2d44; color: #e0e0e0; padding: 12px 18px; 
+                                border-radius: 18px 18px 18px 4px; margin: 8px 0;'>
+                        {msg['content']}
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        # Chat input
+        col_input, col_send = st.columns([5, 1])
+        with col_input:
+            default_input = st.session_state.get('metrics_chat_input', '')
+            user_question = st.text_input("Ask a question about your data quality...", 
+                                          value=default_input,
+                                          key="chat_input_field",
+                                          placeholder="e.g., What should I prioritize fixing?")
+        with col_send:
+            send_clicked = st.button("📤 Send", use_container_width=True, type="primary")
+        
+        # Clear the stored input after using it
+        if 'metrics_chat_input' in st.session_state:
+            del st.session_state.metrics_chat_input
+        
+        if send_clicked and user_question:
+            # Add user message
+            st.session_state.metrics_chat_history.append({
+                'role': 'user',
+                'content': user_question
+            })
             
-            sample_size = st.slider("Sample size per table", 100, 5000, 1000, step=100,
-                                   help="Number of rows to analyze per table (larger = slower but more accurate)")
+            with st.spinner("🤔 Thinking..."):
+                try:
+                    from dq_agents.metrics.agent import metrics_agent
+                    from google.adk.runners import Runner
+                    from google.adk.sessions import InMemorySessionService
+                    from google.adk.artifacts import InMemoryArtifactService
+                    from google.genai import types
+                    
+                    session_service = InMemorySessionService()
+                    artifact_service = InMemoryArtifactService()
+                    runner = Runner(
+                        app_name="DQMetricsChat",
+                        agent=metrics_agent,
+                        session_service=session_service,
+                        artifact_service=artifact_service
+                    )
+                    
+                    import asyncio
+                    session = asyncio.run(session_service.create_session(
+                        app_name="DQMetricsChat",
+                        user_id="streamlit_user"
+                    ))
+                    
+                    # Build context
+                    data_summary = get_data_summary()
+                    context = f"""
+                    Current Data Quality Status:
+                    - Has issues data: {data_summary['has_issues']}
+                    - Total violations: {data_summary['total_violations']}
+                    - Total issue types: {data_summary['total_issues']}
+                    - Tables affected: {', '.join(data_summary['tables']) if data_summary['tables'] else 'None'}
+                    - Severity breakdown: {json.dumps(data_summary['severity_breakdown'])}
+                    - Category breakdown: {json.dumps(data_summary['dimension_breakdown'])}
+                    """
+                    
+                    prompt = f"""
+                    You are a friendly data quality assistant helping a non-technical user understand their data issues.
+                    
+                    {context}
+                    
+                    User Question: {user_question}
+                    
+                    Instructions:
+                    1. Answer in plain, simple English - avoid technical jargon
+                    2. Use numbers and percentages to make your point
+                    3. Be concise but helpful (2-3 paragraphs max)
+                    4. If relevant, suggest a specific action they can take
+                    5. Use emoji sparingly to make it friendly
+                    6. If there's no data, explain they need to run the Identifier/Treatment agents first
+                    
+                    Respond directly to their question:
+                    """
+                    
+                    content = types.Content(role="user", parts=[types.Part(text=prompt)])
+                    events = list(runner.run(
+                        user_id="streamlit_user",
+                        session_id=session.id,
+                        new_message=content
+                    ))
+                    
+                    if events:
+                        last_event = events[-1]
+                        response = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
+                        
+                        st.session_state.metrics_chat_history.append({
+                            'role': 'assistant',
+                            'content': response
+                        })
+                    else:
+                        st.session_state.metrics_chat_history.append({
+                            'role': 'assistant',
+                            'content': "I'm sorry, I couldn't process that question. Please try again."
+                        })
+                    
+                except Exception as e:
+                    st.session_state.metrics_chat_history.append({
+                        'role': 'assistant',
+                        'content': f"Oops! Something went wrong: {str(e)}"
+                    })
             
-            run_button_label = "🔍 Run Cross-Table Detection" if detection_scope == "Cross-Table Analysis" else "🔍 Run Anomaly Detection"
+            st.rerun()
+        
+        # Clear chat button
+        if st.session_state.metrics_chat_history:
+            if st.button("🗑️ Clear Chat History", key="clear_chat"):
+                st.session_state.metrics_chat_history = []
+                st.rerun()
+    
+    # ===== INSIGHTS VIEW =====
+    elif current_view == 'insights':
+        st.markdown("## 💡 Smart Insights")
+        st.markdown("*AI-powered analysis of your data quality issues*")
+        
+        data_summary = get_data_summary()
+        
+        if data_summary['has_issues']:
+            # Generate insights automatically
+            insights = []
             
-            if st.button(run_button_label, key="run_anomaly"):
-                with st.status(f"🤖 Running IsolationForest ML algorithm on {len(tables_to_analyze)} table(s)...", expanded=True) as status:
+            # Critical issues insight
+            critical = data_summary['severity_breakdown'].get('critical', 0)
+            if critical > 0:
+                insights.append({
+                    'icon': '🚨',
+                    'title': 'Urgent Action Required',
+                    'text': f'You have {critical} critical issue(s) that need immediate attention. These could impact business operations.',
+                    'priority': 1
+                })
+            
+            # Most common dimension
+            if data_summary['dimension_breakdown']:
+                top_dim = max(data_summary['dimension_breakdown'].items(), key=lambda x: x[1])
+                insights.append({
+                    'icon': '📊',
+                    'title': f'{top_dim[0]} Issues Lead',
+                    'text': f'{top_dim[0]} has {top_dim[1]:,} violations - this is your biggest category of issues.',
+                    'priority': 2
+                })
+            
+            # Table health
+            if len(data_summary['tables']) > 1:
+                insights.append({
+                    'icon': '📋',
+                    'title': 'Multiple Tables Affected',
+                    'text': f'{len(data_summary["tables"])} tables have data quality issues. Consider a systematic cleanup approach.',
+                    'priority': 3
+                })
+            
+            # Cost estimate
+            avg_cost_per_issue = 500  # Estimated GBP per violation
+            estimated_cost = data_summary['total_violations'] * avg_cost_per_issue
+            insights.append({
+                'icon': '💰',
+                'title': 'Estimated Financial Impact',
+                'text': f'These issues could cost approximately £{estimated_cost:,.0f} if left unaddressed. Fixing them is worth it!',
+                'priority': 4
+            })
+            
+            # Quick wins
+            low_priority = data_summary['severity_breakdown'].get('low', 0)
+            if low_priority > 0:
+                insights.append({
+                    'icon': '✨',
+                    'title': 'Quick Wins Available',
+                    'text': f'There are {low_priority} low-severity issues that can be fixed easily to improve your overall score.',
+                    'priority': 5
+                })
+            
+            # Display insights as cards
+            for insight in sorted(insights, key=lambda x: x['priority']):
+                st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #1e3a5f 0%, #162447 100%); 
+                            border-radius: 12px; padding: 20px; margin: 15px 0; 
+                            border-left: 4px solid #4da6ff; display: flex; align-items: flex-start; gap: 15px;'>
+                    <div style='font-size: 2rem;'>{insight['icon']}</div>
+                    <div>
+                        <div style='font-size: 1.1rem; font-weight: 600; color: #4da6ff; margin-bottom: 8px;'>{insight['title']}</div>
+                        <div style='color: #e0e0e0; font-size: 1rem;'>{insight['text']}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.divider()
+            
+            # Recommendations section
+            st.markdown("### 🎯 Recommended Actions")
+            
+            rec_cols = st.columns(3)
+            
+            with rec_cols[0]:
+                st.markdown("""
+                <div style='background: #1a1a2e; border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #ff4757;'>
+                    <div style='font-size: 2rem; margin-bottom: 10px;'>1️⃣</div>
+                    <div style='color: #ff4757; font-weight: 600; margin-bottom: 8px;'>Fix Critical Issues</div>
+                    <div style='color: #a0a0a0; font-size: 0.9rem;'>Address high-impact problems first</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with rec_cols[1]:
+                st.markdown("""
+                <div style='background: #1a1a2e; border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #ffc107;'>
+                    <div style='font-size: 2rem; margin-bottom: 10px;'>2️⃣</div>
+                    <div style='color: #ffc107; font-weight: 600; margin-bottom: 8px;'>Validate Fixes</div>
+                    <div style='color: #a0a0a0; font-size: 0.9rem;'>Use dry-run mode to test safely</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with rec_cols[2]:
+                st.markdown("""
+                <div style='background: #1a1a2e; border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #2ed573;'>
+                    <div style='font-size: 2rem; margin-bottom: 10px;'>3️⃣</div>
+                    <div style='color: #2ed573; font-weight: 600; margin-bottom: 8px;'>Monitor Regularly</div>
+                    <div style='color: #a0a0a0; font-size: 0.9rem;'>Set up recurring DQ checks</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Advanced AI Analysis button
+            st.divider()
+            if st.button("🤖 Generate Deep AI Analysis", use_container_width=True, type="primary"):
+                with st.spinner("🔍 AI is analyzing patterns in your data..."):
                     try:
                         from dq_agents.metrics.agent import metrics_agent
                         from google.adk.runners import Runner
@@ -2667,10 +3185,10 @@ elif active_tab == "📊 Metrics":
                         from google.adk.artifacts import InMemoryArtifactService
                         from google.genai import types
                         
-                        # Initialize ADK runner
                         session_service = InMemorySessionService()
                         artifact_service = InMemoryArtifactService()
                         runner = Runner(
+                            app_name="DQMetricsInsights",
                             agent=metrics_agent,
                             session_service=session_service,
                             artifact_service=artifact_service
@@ -2678,43 +3196,27 @@ elif active_tab == "📊 Metrics":
                         
                         import asyncio
                         session = asyncio.run(session_service.create_session(
-                            app_name="DQMetricsAgent",
+                            app_name="DQMetricsInsights",
                             user_id="streamlit_user"
                         ))
                         
-                        if detection_scope == "Cross-Table Analysis":
-                            prompt = f"""
-                            Run cross-table anomaly detection across these tables: {', '.join(tables_to_analyze)}.
-                            
-                            For EACH table, use the detect_anomalies_in_data tool with sample size {sample_size}.
-                            
-                            Then analyze:
-                            1. Common anomalies appearing in multiple tables (policy IDs present in 2+ tables)
-                            2. Trending anomalies (getting worse from week1 to week4)
-                            3. Isolated anomalies (only in one table)
-                            
-                            Provide:
-                            - Total anomalies per table
-                            - Cross-table anomaly patterns
-                            - Most severe outliers
-                            - Recommendations for investigation
-                            
-                            Return results in JSON format with sections: per_table_results, cross_table_patterns, recommendations.
-                            """
-                        else:
-                            prompt = f"""
-                            Run anomaly detection on table '{tables_to_analyze[0]}' with sample size {sample_size}.
-                            
-                            Use the detect_anomalies_in_data tool to identify outliers in numerical columns.
-                            
-                            Provide:
-                            1. Number of anomalies detected
-                            2. Anomaly rate (%)
-                            3. Top 10 most anomalous records
-                            4. Statistical summary of analyzed columns
-                            
-                            Return results in clear, structured format.
-                            """
+                        issues_json = json.dumps(st.session_state.filtered_issues, default=str)
+                        
+                        prompt = f"""
+                        Analyze these data quality issues and provide deep insights:
+                        
+                        {issues_json}
+                        
+                        Provide:
+                        1. Pattern Analysis: Are there patterns or correlations between issue types?
+                        2. Root Cause Hypothesis: What might be causing these issues?
+                        3. Priority Matrix: Which issues to fix in what order?
+                        4. Time to Fix Estimates: How long might each category take to remediate?
+                        5. Prevention Recommendations: How to prevent these issues in the future?
+                        
+                        Write in a friendly, easy-to-understand style for non-technical stakeholders.
+                        Use bullet points and clear headings.
+                        """
                         
                         content = types.Content(role="user", parts=[types.Part(text=prompt)])
                         events = list(runner.run(
@@ -2725,722 +3227,551 @@ elif active_tab == "📊 Metrics":
                         
                         if events:
                             last_event = events[-1]
-                            response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
-                            
-                            st.session_state.anomaly_results = response_text
-                            st.session_state.anomaly_scope = detection_scope
-                            st.session_state.anomaly_tables = tables_to_analyze
-                            status.update(label=f"✅ Anomaly detection complete across {len(tables_to_analyze)} table(s)!", state="complete", expanded=False)
+                            response = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
+                            st.session_state.deep_analysis = response
                             st.rerun()
-                        else:
-                            status.update(label="❌ No response from Metrics Agent", state="error")
-                            st.error("❌ No response from Metrics Agent")
-                            
+                        
                     except Exception as e:
-                        status.update(label="❌ Error during anomaly detection", state="error")
-                        st.error(f"❌ Error: {str(e)}")
-                        import traceback
-                        with st.expander("🐛 Debug Info"):
-                            st.code(traceback.format_exc())
+                        st.error(f"Error: {str(e)}")
             
-            # Display anomaly results
-            if 'anomaly_results' in st.session_state:
-                st.divider()
+            # Display deep analysis if available
+            if 'deep_analysis' in st.session_state:
+                st.markdown("### 🧠 AI Deep Analysis")
+                st.markdown(st.session_state.deep_analysis)
                 
-                scope = st.session_state.get('anomaly_scope', 'Single Table')
-                tables_analyzed = st.session_state.get('anomaly_tables', [])
-                
-                if scope == "Cross-Table Analysis":
-                    st.markdown(f"### 🎯 Cross-Table Anomaly Analysis ({len(tables_analyzed)} tables)")
-                else:
-                    st.markdown("### 🎯 Anomaly Detection Results")
-                
-                response_text = st.session_state.anomaly_results
-                
-                # Try to extract JSON
-                import re
-                json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_text)
-                if json_match:
-                    json_str = json_match.group(1)
-                else:
-                    json_match = re.search(r'\{[\s\S]*\}', response_text)
-                    json_str = json_match.group(0) if json_match else None
-                
-                if json_str:
-                    try:
-                        anomaly_data = json.loads(json_str)
-                        
-                        if scope == "Cross-Table Analysis" and 'per_table_results' in anomaly_data:
-                            # Cross-table view
-                            st.subheader("📊 Per-Table Summary")
-                            
-                            table_summary = []
-                            for table_result in anomaly_data.get('per_table_results', []):
-                                table_summary.append({
-                                    'Table': table_result.get('table', 'N/A'),
-                                    'Rows Analyzed': table_result.get('rows_analyzed', 0),
-                                    'Anomalies': table_result.get('anomalies_found', 0),
-                                    'Anomaly Rate': f"{table_result.get('anomaly_rate', 0):.1f}%"
-                                })
-                            
-                            if table_summary:
-                                summary_df = pd.DataFrame(table_summary)
-                                st.dataframe(summary_df, use_container_width=True)
-                            
-                            # Cross-table patterns
-                            if 'cross_table_patterns' in anomaly_data:
-                                st.subheader("🔗 Cross-Table Patterns")
-                                patterns = anomaly_data['cross_table_patterns']
-                                
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.metric("Common Anomalies", patterns.get('common_anomalies', 0),
-                                             help="Anomalies appearing in 2+ tables")
-                                with col2:
-                                    st.metric("Trending Issues", patterns.get('trending_anomalies', 0),
-                                             help="Anomalies getting worse over time")
-                                with col3:
-                                    st.metric("Isolated Cases", patterns.get('isolated_anomalies', 0),
-                                             help="Anomalies in only one table")
-                                
-                                if 'details' in patterns:
-                                    with st.expander("📋 Pattern Details"):
-                                        st.write(patterns['details'])
-                            
-                            # Recommendations
-                            if 'recommendations' in anomaly_data:
-                                st.subheader("💡 Recommendations")
-                                for rec in anomaly_data['recommendations']:
-                                    st.info(rec)
-                        
-                        else:
-                            # Single table view
-                            # Display metrics
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("Rows Analyzed", anomaly_data.get('total_rows_analyzed', 'N/A'))
-                            with col2:
-                                st.metric("Anomalies Found", anomaly_data.get('anomalies_detected', 'N/A'))
-                            with col3:
-                                st.metric("Anomaly Rate", f"{anomaly_data.get('anomaly_rate', 0)}%")
-                            
-                            # Show top anomalies
-                            if 'top_anomalies' in anomaly_data and anomaly_data['top_anomalies']:
-                                st.subheader("Top Anomalous Records")
-                                
-                                anomalies_list = []
-                                for anom in anomaly_data['top_anomalies'][:10]:
-                                    row_data = {'Policy ID': anom.get('policy_id', 'N/A')}
-                                    row_data['Anomaly Score'] = anom.get('anomaly_score', 0)
-                                    row_data.update(anom.get('values', {}))
-                                    anomalies_list.append(row_data)
-                                
-                                anom_df = pd.DataFrame(anomalies_list)
-                                st.dataframe(anom_df, use_container_width=True)
-                                
-                                st.info("💡 Lower anomaly scores indicate more unusual records")
-                            
-                            # Statistics
-                            if 'statistics' in anomaly_data:
-                                with st.expander("📊 Column Statistics"):
-                                    stats_df = pd.DataFrame(anomaly_data['statistics']).T
-                                    st.dataframe(stats_df, use_container_width=True)
-                        
-                        # Download anomaly report
-                        st.divider()
-                        col_download1, col_download2 = st.columns(2)
-                        
-                        with col_download1:
-                            # Format as markdown
-                            md_report = f"# Anomaly Detection Report\n\n"
-                            md_report += f"**Analysis Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                            md_report += f"**Tables Analyzed:** {', '.join(tables_analyzed)}\n\n"
-                            md_report += f"**Detection Scope:** {scope}\n\n"
-                            md_report += f"## Results\n\n```json\n{json.dumps(anomaly_data, indent=2)}\n```\n"
-                            
-                            st.download_button(
-                                label="📥 Download Anomaly Report (Markdown)",
-                                data=md_report,
-                                file_name=f"anomaly_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                                mime="text/markdown",
-                                key="download_anomaly_md"
-                            )
-                        
-                        with col_download2:
-                            st.download_button(
-                                label="📥 Download Raw Data (JSON)",
-                                data=json.dumps(anomaly_data, indent=2),
-                                file_name=f"anomaly_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                                mime="application/json",
-                                key="download_anomaly_json"
-                            )
-                        
-                    except json.JSONDecodeError:
-                        st.markdown(response_text)
-                        
-                        # Still offer download of raw text
-                        st.download_button(
-                            label="📥 Download Results (Text)",
-                            data=response_text,
-                            file_name=f"anomaly_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                            mime="text/plain"
-                        )
-                else:
-                    st.markdown(response_text)
-                    
-                    # Download option
-                    st.download_button(
-                        label="📥 Download Results",
-                        data=response_text,
-                        file_name=f"anomaly_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                        mime="text/plain"
-                    )
-                
-                if st.button("🔄 Run New Detection"):
-                    del st.session_state.anomaly_results
-                    if 'anomaly_scope' in st.session_state:
-                        del st.session_state.anomaly_scope
-                    if 'anomaly_tables' in st.session_state:
-                        del st.session_state.anomaly_tables
+                if st.button("🔄 Clear Analysis", key="clear_analysis"):
+                    del st.session_state.deep_analysis
                     st.rerun()
-    
-    # ===== COST OF INACTION MODE =====
-    elif metrics_mode == "💰 Cost of Inaction":
-        with st.container():
-            st.subheader("Cost of Inaction Analysis")
-            st.markdown("Calculate the financial risk of leaving DQ issues unresolved")
+        
+        else:
+            # ===== STANDALONE ANOMALY DETECTION =====
+            st.markdown("### 🔬 Standalone Data Analysis")
+            st.info("No data from previous steps? Run comprehensive analysis directly on your BigQuery tables!")
             
-            if 'filtered_issues' not in st.session_state or not st.session_state.filtered_issues:
-                st.warning("⚠️ No DQ issues detected yet. Run rules in Identifier tab first.")
-                
-                # Show manual calculator
-                st.divider()
-                st.markdown("### Manual Calculator")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    manual_rows = st.number_input("Affected Rows", min_value=1, value=100, step=10)
-                    manual_table = st.selectbox("Table", ["policies_week1", "policies_week2", "policies_week3", "policies_week4"])
-                
-                with col2:
-                    st.info("💡 Calculation uses:\n- Average policy value from table\n- Regulatory risk (0.1%)\n- Customer churn risk (2%)\n- Operational cost (0.5%)")
-                
-                if st.button("💰 Calculate Cost", key="calc_manual_cost"):
-                    with st.status("Calculating financial impact...", expanded=True) as status:
-                        try:
-                            from dq_agents.metrics.agent import metrics_agent
-                            from google.adk.runners import Runner
-                            from google.adk.sessions import InMemorySessionService
-                            from google.adk.artifacts import InMemoryArtifactService
-                            
-                            session_service = InMemorySessionService()
-                            artifact_service = InMemoryArtifactService()
-                            runner = Runner(
-                                agent=metrics_agent,
-                                session_service=session_service,
-                                artifact_service=artifact_service
-                            )
-                            
-                            import asyncio
-                            session = asyncio.run(session_service.create_session(
-                                app_name="DQMetricsAgent",
-                                user_id="streamlit_user"
-                            ))
-                            
-                            prompt = (
-                                f"Calculate the Cost of Inaction for {manual_rows} affected rows in table '{manual_table}'.\n\n"
-                                "Use calculate_cost_of_inaction tool to compute:\n"
-                                "1. Total exposure (affected rows * avg policy value)\n"
-                                "2. Monthly and annual Cost of Inaction\n"
-                                "3. Materiality Index (High/Medium/Low)\n"
-                                "4. Risk breakdown (regulatory, churn, operational)\n\n"
-                                "Provide clear financial impact summary."
-                            )
-                            
-                            content = types.Content(role="user", parts=[types.Part(text=prompt)])
-                            events = list(runner.run(
-                                user_id="streamlit_user",
-                                session_id=session.id,
-                                new_message=content
-                            ))
-                            
-                            if events:
-                                last_event = events[-1]
-                                response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
-                                st.session_state.coi_results = response_text
-                                status.update(label="✅ Calculation complete!", state="complete", expanded=False)
-                                st.rerun()
-                            else:
-                                status.update(label="❌ No response from Metrics Agent", state="error")
-                                st.error("❌ No response from Metrics Agent")
-                            
-                        except Exception as e:
-                            status.update(label="❌ Error during calculation", state="error")
-                            st.error(f"❌ Error: {str(e)}")
-            else:
-                # Calculate from actual issues
-                issues = st.session_state.filtered_issues
-                total_violations = sum(issue.get('total_count', 0) for issue in issues)
-                table_name = issues[0].get('table', 'policies_week1') if issues else 'policies_week1'
-                
-                st.info(f"📊 Analyzing {total_violations:,} violations in `{table_name}`")
-                
-                if st.button("💰 Calculate Cost of Inaction", key="calc_auto_cost"):
-                    with st.status("Calculating financial impact...", expanded=True) as status:
-                        try:
-                            from dq_agents.metrics.agent import metrics_agent
-                            from google.adk.runners import Runner
-                            from google.adk.sessions import InMemorySessionService
-                            from google.adk.artifacts import InMemoryArtifactService
-                            
-                            session_service = InMemorySessionService()
-                            artifact_service = InMemoryArtifactService()
-                            runner = Runner(
-                                agent=metrics_agent,
-                                session_service=session_service,
-                                artifact_service=artifact_service
-                            )
-                            
-                            import asyncio
-                            session = asyncio.run(session_service.create_session(
-                                app_name="DQMetricsAgent",
-                                user_id="streamlit_user"
-                            ))
-                            
-                            prompt = (
-                                f"Calculate the Cost of Inaction for {total_violations} affected rows in table '{table_name}'.\n\n"
-                                "Use calculate_cost_of_inaction tool to compute financial impact.\n\n"
-                                "Provide detailed analysis with:\n"
-                                "1. Total exposure\n"
-                                "2. Monthly/Annual Cost of Inaction\n"
-                                "3. Materiality Index\n"
-                                "4. Risk breakdown\n"
-                                "5. Actionable recommendations"
-                            )
-                            
-                            content = types.Content(role="user", parts=[types.Part(text=prompt)])
-                            events = list(runner.run(
-                                user_id="streamlit_user",
-                                session_id=session.id,
-                                new_message=content
-                            ))
-                            
-                            if events:
-                                last_event = events[-1]
-                                response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
-                                st.session_state.coi_results = response_text
-                                status.update(label="✅ Calculation complete!", state="complete", expanded=False)
-                                st.rerun()
-                            else:
-                                status.update(label="❌ No response from Metrics Agent", state="error")
-                                st.error("❌ No response from Metrics Agent")
-                            
-                        except Exception as e:
-                            status.update(label="❌ Error during calculation", state="error")
-                            st.error(f"❌ Error: {str(e)}")
+            analysis_tabs = st.tabs(["🎯 Anomaly Detection", "📊 Data Profiling", "💰 Quality Cost Calculator"])
             
-            # Display COI results
-            if 'coi_results' in st.session_state:
-                st.divider()
-                st.markdown("### 💰 Financial Impact Analysis")
+            # ----- ANOMALY DETECTION TAB -----
+            with analysis_tabs[0]:
+                st.markdown("#### Detect Data Anomalies with ML")
+                st.markdown("*Uses IsolationForest algorithm to identify unusual patterns in your data*")
                 
-                response_text = st.session_state.coi_results
-                
-                # Extract JSON
-                import re
-                json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_text)
-                if json_match:
-                    json_str = json_match.group(1)
-                else:
-                    json_match = re.search(r'\{[\s\S]*\}', response_text)
-                    json_str = json_match.group(0) if json_match else None
-                
-                if json_str:
-                    try:
-                        coi_data = json.loads(json_str)
-                        
-                        # Key metrics
-                        col1, col2, col3, col4 = st.columns(4)
+                # Get available tables
+                try:
+                    from google.cloud import bigquery
+                    bq_client = bigquery.Client(project=project_id)
+                    
+                    # Get tables list
+                    tables_query = f"""
+                        SELECT table_name 
+                        FROM `{project_id}.{dataset_id}.INFORMATION_SCHEMA.TABLES`
+                        WHERE table_type = 'BASE TABLE'
+                    """
+                    tables_result = bq_client.query(tables_query).result()
+                    available_tables = [row.table_name for row in tables_result]
+                    
+                    if available_tables:
+                        col1, col2 = st.columns([2, 1])
                         
                         with col1:
-                            st.metric(
-                                "Total Exposure",
-                                f"GBP {coi_data.get('total_exposure', 0)/1000000:.2f}M"
+                            anomaly_table = st.selectbox(
+                                "Select Table for Anomaly Detection",
+                                available_tables,
+                                key="anomaly_table_select"
                             )
                         
                         with col2:
-                            monthly = coi_data.get('cost_of_inaction', {}).get('monthly', 0)
-                            st.metric(
-                                "Monthly CoI",
-                                f"GBP {monthly/1000:.1f}K"
+                            contamination = st.slider(
+                                "Anomaly Sensitivity",
+                                min_value=0.01,
+                                max_value=0.3,
+                                value=0.1,
+                                step=0.01,
+                                help="Higher = more anomalies detected"
                             )
                         
-                        with col3:
-                            annual = coi_data.get('cost_of_inaction', {}).get('annual', 0)
-                            st.metric(
-                                "Annual CoI",
-                                f"GBP {annual/1000:.1f}K"
-                            )
-                        
-                        with col4:
-                            materiality = coi_data.get('materiality_index', 'Unknown')
-                            color = '🔴' if materiality == 'High' else '🟡' if materiality == 'Medium' else '🟢'
-                            st.metric(
-                                "Materiality",
-                                f"{color} {materiality}"
-                            )
-                        
-                        # Risk breakdown
-                        if 'cost_breakdown' in coi_data:
-                            st.subheader("Cost Breakdown")
-                            
-                            breakdown = coi_data['cost_breakdown']
-                            breakdown_df = pd.DataFrame([
-                                {'Risk Type': 'Regulatory', 'Amount (GBP)': breakdown.get('regulatory_risk', 0)},
-                                {'Risk Type': 'Customer Churn', 'Amount (GBP)': breakdown.get('customer_churn_risk', 0)},
-                                {'Risk Type': 'Operational', 'Amount (GBP)': breakdown.get('operational_cost', 0)}
-                            ])
-                            
-                            fig = px.bar(
-                                breakdown_df,
-                                x='Risk Type',
-                                y='Amount (GBP)',
-                                title='Monthly Cost Breakdown',
-                                color='Risk Type',
-                                height=300
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Dynamic storytelling
-                        st.divider()
-                        st.markdown("### 📖 Executive Summary")
-                        
-                        total_exp = coi_data.get('total_exposure', 0)
-                        monthly_coi = coi_data.get('cost_of_inaction', {}).get('monthly', 0)
-                        affected = coi_data.get('affected_rows', 0)
-                        mat = coi_data.get('materiality_index', 'Unknown')
-                        
-                        # Calculate values first
-                        total_exp_m = total_exp / 1000000
-                        monthly_coi_k = monthly_coi / 1000
-                        annual_coi_k = (monthly_coi * 12) / 1000
-                        annual_loss_m = (monthly_coi * 12) / 1000000
-                        
-                        # Determine recommendation
-                        if mat == 'High':
-                            recommendation = "⚠️ **Immediate action required.** High-priority remediation needed to mitigate significant financial exposure."
-                        elif mat == 'Medium':
-                            recommendation = "📋 **Schedule remediation.** Medium-priority issue should be addressed in the next sprint."
-                        else:
-                            recommendation = "✅ **Monitor and fix.** Low-priority issue, include in routine maintenance."
-                        
-                        # Format currency values first to avoid f-string parsing issues with markdown
-                        total_exp_str = f"{total_exp_m:.2f}"
-                        monthly_coi_str = f"{monthly_coi_k:.1f}"
-                        annual_coi_str = f"{annual_coi_k:.1f}"
-                        annual_loss_str = f"{annual_loss_m:.2f}"
-                        affected_str = f"{affected:,}"
-                        
-                        narrative = (
-                            f"This data quality issue has **{mat}** materiality, affecting **{affected_str}** policy records "
-                            f"with a total exposure of **GBP {total_exp_str}M** in policy value.\n\n"
-                            f"**Financial Impact:**\n"
-                            f"- The projected Cost of Inaction is **GBP {monthly_coi_str}K per month** (GBP {annual_coi_str}K annually)\n"
-                            f"- This includes regulatory risk, customer churn potential, and operational costs\n"
-                            f"- Immediate remediation could prevent **GBP {annual_loss_str}M** in annual losses\n\n"
-                            f"**Recommendation:**\n"
-                            f"{recommendation}"
+                        if st.button("🔍 Run Anomaly Detection", key="run_anomaly", type="primary"):
+                            with st.spinner("Analyzing data for anomalies..."):
+                                try:
+                                    # Get numeric columns
+                                    schema_query = f"""
+                                        SELECT column_name, data_type
+                                        FROM `{project_id}.{dataset_id}.INFORMATION_SCHEMA.COLUMNS`
+                                        WHERE table_name = '{anomaly_table}'
+                                        AND data_type IN ('INT64', 'FLOAT64', 'NUMERIC', 'BIGNUMERIC')
+                                    """
+                                    schema_result = bq_client.query(schema_query).result()
+                                    numeric_cols = [row.column_name for row in schema_result]
+                                    
+                                    if len(numeric_cols) >= 2:
+                                        # Get sample data
+                                        data_query = f"""
+                                            SELECT {', '.join(numeric_cols[:5])}
+                                            FROM `{project_id}.{dataset_id}.{anomaly_table}`
+                                            WHERE {' AND '.join([f'{col} IS NOT NULL' for col in numeric_cols[:5]])}
+                                            LIMIT 1000
+                                        """
+                                        df = bq_client.query(data_query).to_dataframe()
+                                        
+                                        if len(df) > 10:
+                                            # Run IsolationForest
+                                            from sklearn.ensemble import IsolationForest
+                                            from sklearn.preprocessing import StandardScaler
+                                            
+                                            scaler = StandardScaler()
+                                            X = scaler.fit_transform(df[numeric_cols[:5]])
+                                            
+                                            iso_forest = IsolationForest(
+                                                contamination=contamination,
+                                                random_state=42,
+                                                n_estimators=100
+                                            )
+                                            predictions = iso_forest.fit_predict(X)
+                                            scores = iso_forest.decision_function(X)
+                                            
+                                            df['anomaly'] = predictions
+                                            df['anomaly_score'] = scores
+                                            
+                                            anomalies = df[df['anomaly'] == -1]
+                                            normal = df[df['anomaly'] == 1]
+                                            
+                                            # Display results
+                                            st.success(f"✅ Analysis complete! Found **{len(anomalies)}** anomalies out of **{len(df)}** records ({len(anomalies)/len(df)*100:.1f}%)")
+                                            
+                                            # Metrics
+                                            m1, m2, m3, m4 = st.columns(4)
+                                            with m1:
+                                                st.metric("Total Records", f"{len(df):,}")
+                                            with m2:
+                                                st.metric("Anomalies", f"{len(anomalies):,}")
+                                            with m3:
+                                                st.metric("Normal Records", f"{len(normal):,}")
+                                            with m4:
+                                                anomaly_pct = len(anomalies)/len(df)*100
+                                                st.metric("Anomaly Rate", f"{anomaly_pct:.1f}%", 
+                                                         delta=f"{anomaly_pct - contamination*100:.1f}%" if anomaly_pct > contamination*100 else None,
+                                                         delta_color="inverse")
+                                            
+                                            # Visualization
+                                            import plotly.express as px
+                                            
+                                            col1, col2 = st.columns(2)
+                                            
+                                            with col1:
+                                                # Scatter plot of first two dimensions
+                                                fig = px.scatter(
+                                                    df, 
+                                                    x=numeric_cols[0], 
+                                                    y=numeric_cols[1],
+                                                    color=df['anomaly'].map({1: 'Normal', -1: 'Anomaly'}),
+                                                    color_discrete_map={'Normal': '#00d26a', 'Anomaly': '#ff4757'},
+                                                    title=f"Anomaly Detection: {numeric_cols[0]} vs {numeric_cols[1]}",
+                                                    template="plotly_dark"
+                                                )
+                                                fig.update_layout(
+                                                    plot_bgcolor='rgba(0,0,0,0)',
+                                                    paper_bgcolor='rgba(0,0,0,0)'
+                                                )
+                                                st.plotly_chart(fig, use_container_width=True)
+                                            
+                                            with col2:
+                                                # Score distribution
+                                                fig2 = px.histogram(
+                                                    df,
+                                                    x='anomaly_score',
+                                                    color=df['anomaly'].map({1: 'Normal', -1: 'Anomaly'}),
+                                                    color_discrete_map={'Normal': '#00d26a', 'Anomaly': '#ff4757'},
+                                                    title="Anomaly Score Distribution",
+                                                    template="plotly_dark",
+                                                    nbins=50
+                                                )
+                                                fig2.update_layout(
+                                                    plot_bgcolor='rgba(0,0,0,0)',
+                                                    paper_bgcolor='rgba(0,0,0,0)'
+                                                )
+                                                st.plotly_chart(fig2, use_container_width=True)
+                                            
+                                            # Show anomaly samples
+                                            if len(anomalies) > 0:
+                                                with st.expander("👁️ View Detected Anomalies", expanded=True):
+                                                    st.dataframe(
+                                                        anomalies.sort_values('anomaly_score').head(20),
+                                                        use_container_width=True
+                                                    )
+                                        else:
+                                            st.warning("Not enough data points for anomaly detection (need at least 10 rows)")
+                                    else:
+                                        st.warning("Need at least 2 numeric columns for anomaly detection")
+                                except Exception as e:
+                                    st.error(f"Error running anomaly detection: {str(e)}")
+                    else:
+                        st.warning("No tables found in the dataset")
+                except Exception as e:
+                    st.error(f"Error connecting to BigQuery: {str(e)}")
+            
+            # ----- DATA PROFILING TAB -----
+            with analysis_tabs[1]:
+                st.markdown("#### Quick Data Profiling")
+                st.markdown("*Get instant statistics and quality metrics for any table*")
+                
+                try:
+                    from google.cloud import bigquery
+                    bq_client = bigquery.Client(project=project_id)
+                    
+                    tables_query = f"""
+                        SELECT table_name 
+                        FROM `{project_id}.{dataset_id}.INFORMATION_SCHEMA.TABLES`
+                        WHERE table_type = 'BASE TABLE'
+                    """
+                    tables_result = bq_client.query(tables_query).result()
+                    available_tables = [row.table_name for row in tables_result]
+                    
+                    if available_tables:
+                        profile_table = st.selectbox(
+                            "Select Table to Profile",
+                            available_tables,
+                            key="profile_table_select"
                         )
                         
-                        st.info(narrative)
+                        if st.button("📊 Generate Profile", key="run_profile", type="primary"):
+                            with st.spinner("Profiling table..."):
+                                try:
+                                    # Get column info
+                                    cols_query = f"""
+                                        SELECT column_name, data_type, is_nullable
+                                        FROM `{project_id}.{dataset_id}.INFORMATION_SCHEMA.COLUMNS`
+                                        WHERE table_name = '{profile_table}'
+                                    """
+                                    cols_result = bq_client.query(cols_query).result()
+                                    columns_info = [(row.column_name, row.data_type, row.is_nullable) for row in cols_result]
+                                    
+                                    # Get row count
+                                    count_query = f"SELECT COUNT(*) as cnt FROM `{project_id}.{dataset_id}.{profile_table}`"
+                                    count_result = bq_client.query(count_query).result()
+                                    row_count = list(count_result)[0].cnt
+                                    
+                                    # Get null counts for each column
+                                    null_queries = []
+                                    for col, dtype, nullable in columns_info:
+                                        null_queries.append(f"SUM(CASE WHEN `{col}` IS NULL THEN 1 ELSE 0 END) as `{col}_nulls`")
+                                    
+                                    null_query = f"""
+                                        SELECT {', '.join(null_queries)}
+                                        FROM `{project_id}.{dataset_id}.{profile_table}`
+                                    """
+                                    null_result = bq_client.query(null_query).result()
+                                    null_row = list(null_result)[0]
+                                    
+                                    # Build profile data
+                                    profile_data = []
+                                    for col, dtype, nullable in columns_info:
+                                        null_count = getattr(null_row, f"{col}_nulls")
+                                        null_pct = (null_count / row_count * 100) if row_count > 0 else 0
+                                        completeness = 100 - null_pct
+                                        
+                                        profile_data.append({
+                                            "Column": col,
+                                            "Type": dtype,
+                                            "Nullable": nullable,
+                                            "Total Rows": row_count,
+                                            "Null Count": null_count,
+                                            "Null %": f"{null_pct:.1f}%",
+                                            "Completeness": f"{completeness:.1f}%",
+                                            "Quality": "🟢" if completeness >= 95 else ("🟡" if completeness >= 80 else "🟠" if completeness >= 50 else "🔴")
+                                        })
+                                    
+                                    import pandas as pd
+                                    profile_df = pd.DataFrame(profile_data)
+                                    
+                                    # Summary metrics
+                                    avg_completeness = sum([float(p["Completeness"].replace("%","")) for p in profile_data]) / len(profile_data)
+                                    cols_with_nulls = sum([1 for p in profile_data if float(p["Null %"].replace("%","")) > 0])
+                                    
+                                    st.success(f"✅ Profile complete for **{profile_table}**")
+                                    
+                                    m1, m2, m3, m4 = st.columns(4)
+                                    with m1:
+                                        st.metric("Total Rows", f"{row_count:,}")
+                                    with m2:
+                                        st.metric("Total Columns", len(columns_info))
+                                    with m3:
+                                        st.metric("Avg Completeness", f"{avg_completeness:.1f}%")
+                                    with m4:
+                                        st.metric("Cols with Nulls", cols_with_nulls)
+                                    
+                                    st.dataframe(profile_df, use_container_width=True)
+                                    
+                                    # Completeness chart
+                                    import plotly.express as px
+                                    
+                                    completeness_vals = [float(p["Completeness"].replace("%","")) for p in profile_data]
+                                    fig = px.bar(
+                                        x=[p["Column"] for p in profile_data],
+                                        y=completeness_vals,
+                                        color=completeness_vals,
+                                        color_continuous_scale="RdYlGn",
+                                        range_color=[0, 100],
+                                        title="Column Completeness Overview",
+                                        labels={"x": "Column", "y": "Completeness %"},
+                                        template="plotly_dark"
+                                    )
+                                    fig.update_layout(
+                                        plot_bgcolor='rgba(0,0,0,0)',
+                                        paper_bgcolor='rgba(0,0,0,0)',
+                                        showlegend=False
+                                    )
+                                    fig.add_hline(y=95, line_dash="dash", line_color="green", annotation_text="Target: 95%")
+                                    st.plotly_chart(fig, use_container_width=True)
+                                    
+                                except Exception as e:
+                                    st.error(f"Error profiling table: {str(e)}")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+            
+            # ----- COST CALCULATOR TAB -----
+            with analysis_tabs[2]:
+                st.markdown("#### 💰 Data Quality Cost Calculator")
+                st.markdown("*Estimate the financial impact of data quality issues*")
+                
+                with st.form("cost_calculator"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        total_records = st.number_input("Total Records in Dataset", min_value=1000, value=100000, step=1000)
+                        error_rate = st.slider("Estimated Error Rate (%)", min_value=0.1, max_value=30.0, value=5.0, step=0.1)
+                        cost_per_error = st.number_input("Cost per Error (£)", min_value=0.1, value=10.0, step=0.5)
+                    
+                    with col2:
+                        manual_review_time = st.slider("Manual Review Time (min/error)", min_value=1, max_value=60, value=15)
+                        hourly_rate = st.number_input("Staff Hourly Rate (£)", min_value=10.0, value=35.0, step=5.0)
+                        regulatory_fine_risk = st.slider("Regulatory Fine Risk (%)", min_value=0, max_value=100, value=20)
+                    
+                    calculate = st.form_submit_button("Calculate Cost of Inaction", type="primary")
+                    
+                    if calculate:
+                        # Calculate costs
+                        num_errors = int(total_records * error_rate / 100)
+                        direct_cost = num_errors * cost_per_error
+                        review_hours = num_errors * manual_review_time / 60
+                        review_cost = review_hours * hourly_rate
+                        potential_fine = direct_cost * (regulatory_fine_risk / 100) * 10  # Fines often 10x
                         
-                    except json.JSONDecodeError:
-                        st.markdown(response_text)
-                else:
-                    st.markdown(response_text)
+                        total_cost = direct_cost + review_cost + potential_fine
+                        
+                        # Savings with automation (assume 80% reduction)
+                        automation_savings = total_cost * 0.8
+                        
+                        st.markdown("---")
+                        st.markdown("### 📊 Cost Analysis Results")
+                        
+                        m1, m2, m3 = st.columns(3)
+                        with m1:
+                            st.metric("Estimated Errors", f"{num_errors:,}")
+                        with m2:
+                            st.metric("Direct Error Cost", f"£{direct_cost:,.0f}")
+                        with m3:
+                            st.metric("Review Labor Cost", f"£{review_cost:,.0f}")
+                        
+                        m4, m5, m6 = st.columns(3)
+                        with m4:
+                            st.metric("Regulatory Risk", f"£{potential_fine:,.0f}")
+                        with m5:
+                            st.metric("Total Cost of Inaction", f"£{total_cost:,.0f}", delta=None)
+                        with m6:
+                            st.metric("Savings with Automation", f"£{automation_savings:,.0f}", delta="80% reduction", delta_color="normal")
+                        
+                        # Visualization
+                        import plotly.graph_objects as go
+                        
+                        fig = go.Figure(data=[
+                            go.Bar(
+                                x=['Direct Costs', 'Review Labor', 'Regulatory Risk', 'TOTAL'],
+                                y=[direct_cost, review_cost, potential_fine, total_cost],
+                                marker_color=['#ff6b6b', '#ffa502', '#ff4757', '#2f3542'],
+                                text=[f'£{v:,.0f}' for v in [direct_cost, review_cost, potential_fine, total_cost]],
+                                textposition='outside'
+                            )
+                        ])
+                        fig.update_layout(
+                            title="Cost Breakdown Analysis",
+                            yaxis_title="Cost (£)",
+                            template="plotly_dark",
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)'
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # ROI calculation
+                        implementation_cost = 50000  # Assumed automation implementation cost
+                        payback_months = implementation_cost / (automation_savings / 12) if automation_savings > 0 else float('inf')
+                        
+                        st.markdown("### 💡 ROI Summary")
+                        st.markdown(f"""
+                        | Metric | Value |
+                        |--------|-------|
+                        | Annual Cost of Poor Data | **£{total_cost:,.0f}** |
+                        | Potential Annual Savings | **£{automation_savings:,.0f}** |
+                        | Estimated Implementation | **£{implementation_cost:,.0f}** |
+                        | Payback Period | **{payback_months:.1f} months** |
+                        | 3-Year ROI | **{((automation_savings * 3 - implementation_cost) / implementation_cost * 100):.0f}%** |
+                        """)
     
-    # ===== EXECUTIVE REPORT MODE =====
-    elif metrics_mode == "📝 Executive Report":
-        with st.container():
-            st.subheader("Executive Report Generator")
-            st.markdown("Generate comprehensive reports for stakeholders with multiple export options")
+    # ===== REPORT VIEW =====
+    elif current_view == 'report':
+        st.markdown("## 📄 Generate Executive Report")
+        st.markdown("*Create a professional report to share with stakeholders*")
+        
+        data_summary = get_data_summary()
+        
+        # Report options
+        with st.expander("⚙️ Report Options", expanded=True):
+            report_title = st.text_input("Report Title", "Data Quality Executive Summary")
             
-            # Report configuration
-            with st.expander("⚙️ Report Configuration", expanded=True):
-                report_title = st.text_input("Report Title", "Data Quality Management System - Executive Report")
-                
-                report_sections = st.multiselect(
-                    "Report Sections",
-                    ["Executive Summary", "Key Findings", "Financial Impact", "Remediation Status", 
-                     "Anomaly Analysis", "Recommendations", "Next Steps"],
-                    default=["Executive Summary", "Key Findings", "Financial Impact", "Recommendations", "Next Steps"],
-                    help="Select which sections to include in the report"
+            include_options = st.multiselect(
+                "Include Sections",
+                ["Executive Summary", "Key Metrics", "Issue Breakdown", "Financial Impact", "Recommendations", "Next Steps"],
+                default=["Executive Summary", "Key Metrics", "Issue Breakdown", "Recommendations"]
+            )
+            
+            report_style = st.radio(
+                "Report Style",
+                ["Simple (1 page)", "Detailed (full analysis)"],
+                horizontal=True
+            )
+        
+        if st.button("📝 Generate Report", type="primary", use_container_width=True):
+            with st.spinner("✍️ Writing your report..."):
+                try:
+                    from dq_agents.metrics.agent import metrics_agent
+                    from google.adk.runners import Runner
+                    from google.adk.sessions import InMemorySessionService
+                    from google.adk.artifacts import InMemoryArtifactService
+                    from google.genai import types
+                    
+                    session_service = InMemorySessionService()
+                    artifact_service = InMemoryArtifactService()
+                    runner = Runner(
+                        app_name="DQMetricsReport",
+                        agent=metrics_agent,
+                        session_service=session_service,
+                        artifact_service=artifact_service
+                    )
+                    
+                    import asyncio
+                    session = asyncio.run(session_service.create_session(
+                        app_name="DQMetricsReport",
+                        user_id="streamlit_user"
+                    ))
+                    
+                    context = json.dumps({
+                        'data_summary': data_summary,
+                        'report_title': report_title,
+                        'sections': include_options,
+                        'style': report_style,
+                        'date': datetime.now().strftime('%Y-%m-%d')
+                    }, default=str)
+                    
+                    length_instruction = "Keep it to 1 page equivalent (300-400 words max)" if "Simple" in report_style else "Provide comprehensive analysis (600-800 words)"
+                    
+                    prompt = f"""
+                    Generate a professional executive report for data quality stakeholders.
+                    
+                    Context: {context}
+                    
+                    Title: {report_title}
+                    Sections to include: {', '.join(include_options)}
+                    
+                    Requirements:
+                    1. {length_instruction}
+                    2. Use clear, non-technical language
+                    3. Include specific numbers and percentages
+                    4. Format beautifully with headers and bullet points
+                    5. End with clear action items
+                    6. Make it suitable for C-level executives
+                    
+                    Generate the report in markdown format:
+                    """
+                    
+                    content = types.Content(role="user", parts=[types.Part(text=prompt)])
+                    events = list(runner.run(
+                        user_id="streamlit_user",
+                        session_id=session.id,
+                        new_message=content
+                    ))
+                    
+                    if events:
+                        last_event = events[-1]
+                        response = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
+                        st.session_state.generated_report = response
+                        st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        
+        # Display and download report
+        if 'generated_report' in st.session_state:
+            st.divider()
+            st.markdown("### 📋 Your Report")
+            
+            with st.container():
+                st.markdown(st.session_state.generated_report)
+            
+            st.divider()
+            
+            # Download options
+            dl_cols = st.columns(3)
+            
+            with dl_cols[0]:
+                st.download_button(
+                    "📄 Download Markdown",
+                    st.session_state.generated_report,
+                    file_name=f"dq_report_{datetime.now().strftime('%Y%m%d')}.md",
+                    mime="text/markdown",
+                    use_container_width=True
                 )
-                
-                include_charts = st.checkbox("Include Chart Descriptions", value=True,
-                                            help="Add descriptions of key visualizations")
             
-            if st.button("📝 Generate Report", key="gen_report", type="primary"):
-                with st.status("🤖 AI is generating executive report...", expanded=True) as status:
-                    try:
-                        from dq_agents.metrics.agent import metrics_agent
-                        from google.adk.runners import Runner
-                        from google.adk.sessions import InMemorySessionService
-                        from google.adk.artifacts import InMemoryArtifactService
-                        from google.genai import types
-                        
-                        session_service = InMemorySessionService()
-                        artifact_service = InMemoryArtifactService()
-                        runner = Runner(
-                            agent=metrics_agent,
-                            session_service=session_service,
-                            artifact_service=artifact_service
-                        )
-                        
-                        import asyncio
-                        session = asyncio.run(session_service.create_session(
-                            app_name="DQMetricsAgent",
-                            user_id="streamlit_user"
-                        ))
-                        
-                        # Gather all metrics
-                        metrics_summary = {
-                            'report_title': report_title,
-                            'sections': report_sections,
-                            'include_charts': include_charts,
-                            'generation_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        }
-                        
-                        if 'filtered_issues' in st.session_state:
-                            issues = st.session_state.filtered_issues
-                            total_violations = sum(issue.get('total_count', 0) for issue in issues)
-                            table_name = issues[0].get('table', 'policies_week1') if issues else 'policies_week1'
-                            
-                            metrics_summary['total_issues'] = len(issues)
-                            metrics_summary['total_violations'] = total_violations
-                            metrics_summary['table'] = table_name
-                            metrics_summary['data_source'] = 'treatment_agent'
-                        elif 'independent_metrics' in st.session_state:
-                            ind = st.session_state.independent_metrics
-                            metrics_summary['total_rows'] = ind['total_rows']
-                            metrics_summary['tables_analyzed'] = ind['tables_analyzed']
-                            metrics_summary['data_source'] = 'independent'
-                        
-                        if 'anomaly_results' in st.session_state:
-                            metrics_summary['has_anomaly_data'] = True
-                            metrics_summary['anomaly_scope'] = st.session_state.get('anomaly_scope', 'N/A')
-                        
-                        metrics_json = json.dumps(metrics_summary, indent=2)
-                        
-                        sections_str = ', '.join(report_sections)
-                        prompt = (
-                            "Generate a comprehensive executive report for the Data Quality Management System.\n\n"
-                            "**Report Configuration:**\n"
-                            f"{metrics_json}\n\n"
-                            f"**Report Title:** {report_title}\n\n"
-                            f"**Sections to include:** {sections_str}\n\n"
-                            "For each requested section, provide:\n\n"
-                            "1. **Executive Summary**: High-level overview (2-3 paragraphs) focusing on business impact\n"
-                            "2. **Key Findings**: Bullet points of critical discoveries (5-7 points)\n"
-                            "3. **Financial Impact**: Cost of Inaction analysis with specific GBP amounts\n"
-                            "4. **Remediation Status**: Current state of DQ remediation efforts\n"
-                            "5. **Anomaly Analysis**: Summary of outlier detection findings (if available)\n"
-                            "6. **Recommendations**: Actionable next steps prioritized by impact\n"
-                            "7. **Next Steps**: Immediate actions with timeline and ownership\n\n"
-                            "Use dynamic storytelling to make the report engaging and actionable.\n"
-                            "Format as professional markdown suitable for C-level executives.\n"
-                            "Include relevant metrics, percentages, and financial figures.\n"
-                            "Use tables and lists for clarity.\n\n"
-                            "Start with the title and date, then proceed with requested sections."
-                        )
-                        
-                        content = types.Content(role="user", parts=[types.Part(text=prompt)])
-                        events = list(runner.run(
-                            user_id="streamlit_user",
-                            session_id=session.id,
-                            new_message=content
-                        ))
-                        
-                        if events:
-                            last_event = events[-1]
-                            response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
-                            st.session_state.exec_report = response_text
-                            st.session_state.report_config = metrics_summary
-                            status.update(label="✅ Report generated successfully!", state="complete", expanded=False)
-                            st.rerun()
-                        else:
-                            status.update(label="❌ No response from Metrics Agent", state="error")
-                            st.error("❌ No response from Metrics Agent")
-                        
-                    except Exception as e:
-                        status.update(label="❌ Error during report generation", state="error")
-                        st.error(f"❌ Error: {str(e)}")
-                        import traceback
-                        with st.expander("🐛 Debug Info"):
-                            st.code(traceback.format_exc())
+            with dl_cols[1]:
+                # Simple HTML conversion
+                html_report = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>{report_title}</title>
+                    <style>
+                        body {{ font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }}
+                        h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+                        h2 {{ color: #34495e; margin-top: 30px; }}
+                        ul {{ padding-left: 20px; }}
+                        .footer {{ margin-top: 40px; text-align: center; color: #999; font-size: 0.9em; }}
+                    </style>
+                </head>
+                <body>
+                    {st.session_state.generated_report.replace('# ', '<h1>').replace('## ', '<h2>').replace('### ', '<h3>')}
+                    <div class="footer">Generated by Data Quality Management System | {datetime.now().strftime('%Y-%m-%d')}</div>
+                </body>
+                </html>
+                """
+                
+                st.download_button(
+                    "🌐 Download HTML",
+                    html_report,
+                    file_name=f"dq_report_{datetime.now().strftime('%Y%m%d')}.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
             
-            # Display report
-            if 'exec_report' in st.session_state:
-                st.divider()
-                
-                report_text = st.session_state.exec_report
-                
-                # Display markdown in a nice container
-                with st.container():
-                    st.markdown(report_text)
-                
-                st.divider()
-                
-                # Download options
-                st.subheader("📥 Download Options")
-                
-                col_dl1, col_dl2, col_dl3 = st.columns(3)
-                
-                with col_dl1:
-                    # Markdown download
-                    st.download_button(
-                        label="📄 Download as Markdown",
-                        data=report_text,
-                        file_name=f"dq_executive_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                        mime="text/markdown",
-                        use_container_width=True,
-                        key="download_md"
-                    )
-                
-                with col_dl2:
-                    # HTML download (better formatting)
-                    generated_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    html_content = """<!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>DQ Executive Report</title>
-        <style>
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                max-width: 900px;
-                margin: 40px auto;
-                padding: 20px;
-                line-height: 1.6;
-                color: #333;
-            }
-            h1 {
-                color: #2c3e50;
-                border-bottom: 3px solid #3498db;
-                padding-bottom: 10px;
-            }
-            h2 {
-                color: #34495e;
-                margin-top: 30px;
-                border-left: 4px solid #3498db;
-                padding-left: 15px;
-            }
-            h3 {
-                color: #7f8c8d;
-            }
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                margin: 20px 0;
-            }
-            th, td {
-                border: 1px solid #ddd;
-                padding: 12px;
-                text-align: left;
-            }
-            th {
-                background-color: #3498db;
-                color: white;
-            }
-            tr:nth-child(even) {
-                background-color: #f2f2f2;
-            }
-            .metric {
-                background: #ecf0f1;
-                padding: 15px;
-                border-radius: 5px;
-                margin: 10px 0;
-            }
-            code {
-                background: #f4f4f4;
-                padding: 2px 5px;
-                border-radius: 3px;
-            }
-            .footer {
-                margin-top: 50px;
-                padding-top: 20px;
-                border-top: 1px solid #ddd;
-                text-align: center;
-                color: #7f8c8d;
-                font-size: 0.9em;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="report-header">
-            <p><strong>Generated:</strong> """ + generated_date + """</p>
-            <p><strong>System:</strong> Data Quality Management System (ADK-powered)</p>
-        </div>
-        <hr>
-    """
-                    
-                    # Convert markdown to HTML (basic conversion)
-                    import re
-                    html_body = report_text
-                    
-                    # Convert headers
-                    html_body = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html_body, flags=re.MULTILINE)
-                    html_body = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html_body, flags=re.MULTILINE)
-                    html_body = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html_body, flags=re.MULTILINE)
-                    
-                    # Convert bold
-                    html_body = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html_body)
-                    
-                    # Convert bullet points
-                    html_body = re.sub(r'^\- (.+)$', r'<li>\1</li>', html_body, flags=re.MULTILINE)
-                    html_body = re.sub(r'(<li>.*</li>)', r'<ul>\1</ul>', html_body, flags=re.DOTALL)
-                    
-                    # Convert paragraphs
-                    html_body = re.sub(r'\n\n', '</p><p>', html_body)
-                    html_body = f'<p>{html_body}</p>'
-                    
-                    html_content += html_body
-                    html_content += f"""
-        <div class="footer">
-            <p>Data Quality Management System | {get_organization_name()} {get_copyright_year()}</p>
-            <p>Powered by Google ADK Multi-Agent Framework</p>
-        </div>
-    </body>
-    </html>
-    """
-                    
-                    st.download_button(
-                        label="🌐 Download as HTML",
-                        data=html_content,
-                        file_name=f"dq_executive_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
-                        mime="text/html",
-                        use_container_width=True,
-                        key="download_html"
-                    )
-                
-                with col_dl3:
-                    # Plain text download
-                    st.download_button(
-                        label="📝 Download as Text",
-                        data=report_text,
-                        file_name=f"dq_executive_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                        mime="text/plain",
-                        use_container_width=True,
-                        key="download_txt"
-                    )
-                
-                st.info("💡 **Tip:** HTML format provides the best formatting for sharing via email or intranet. Markdown is ideal for GitHub/documentation systems.")
-                
-                if st.button("🔄 Generate New Report", use_container_width=True):
-                    del st.session_state.exec_report
-                    if 'report_config' in st.session_state:
-                        del st.session_state.report_config
-                    st.rerun()
+            with dl_cols[2]:
+                st.download_button(
+                    "📝 Download Text",
+                    st.session_state.generated_report,
+                    file_name=f"dq_report_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+            
+            if st.button("🔄 Generate New Report", use_container_width=True):
+                del st.session_state.generated_report
+                st.rerun()
     
 elif active_tab == "⚙️ Advanced Settings":
     with st.container():

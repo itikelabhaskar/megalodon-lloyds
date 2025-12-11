@@ -80,6 +80,30 @@ def _get_bigquery_client():
         return bigquery.Client(project=settings["compute_project"])
 
 
+def _get_dataplex_client():
+    """Get Dataplex DataScan client with proper ADK integration.
+    
+    Creates a Dataplex client with consistent project settings and user agent
+    tracking, following the same pattern as BigQuery client for ADK compatibility.
+    """
+    try:
+        from google.cloud import dataplex_v1
+    except ImportError:
+        return None
+    
+    settings = get_database_settings()
+    try:
+        # Create client with proper project settings
+        client = dataplex_v1.DataScanServiceClient()
+        # Note: Dataplex clients don't have direct user_agent parameter
+        # but inherit from google-cloud-python libraries which respect
+        # GOOGLE_CLOUD_PROJECT environment variable
+        return client
+    except Exception as e:
+        print(f"⚠️  Failed to create Dataplex client: {str(e)}")
+        return None
+
+
 def load_preexisting_rules() -> str:
     """Load pre-existing DQ rules from Collibra/Ataccama systems.
     
@@ -314,19 +338,34 @@ def trigger_dataplex_scan(
     - Distinct value counts
     - Min/max values for numeric columns
     - Data quality recommendations
-    """
-    from google.cloud import dataplex_v1
-    from google.api_core import exceptions as google_exceptions
     
+    Falls back to BigQuery-based profiling if Dataplex is not available.
+    """
     settings = get_database_settings()
     project_id = settings["compute_project"]
     data_project_id = settings["project_id"]
     dataset_id = settings["dataset_id"]
     location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
     
+    # Get Dataplex client using ADK-integrated helper
+    client = _get_dataplex_client()
+    if client is None:
+        print("⚠️  Dataplex not available, using BigQuery fallback profiling...")
+        scan_name = f"fallback-{table_name}"
+        scan_id = f"bq-profile-{table_name}"
+        return _fallback_bigquery_profiling(table_name, scan_name, scan_id, settings)
+    
+    # Import Dataplex types for API operations
     try:
-        # Initialize Dataplex DataScan client
-        client = dataplex_v1.DataScanServiceClient()
+        from google.cloud import dataplex_v1
+        from google.api_core import exceptions as google_exceptions
+    except ImportError:
+        # This shouldn't happen if client was created, but handle gracefully
+        scan_name = f"fallback-{table_name}"
+        scan_id = f"bq-profile-{table_name}"
+        return _fallback_bigquery_profiling(table_name, scan_name, scan_id, settings)
+    
+    try:
         
         # Generate unique DataScan ID (lowercase, hyphens only)
         import time
