@@ -1,0 +1,5 @@
+{
+  "status": "permission_error",
+  "error": "Missing Dataplex permissions. Ensure service account has roles/dataplex.admin",
+  "details": "403 Permission denied on resource project None. [reason: \"CONSUMER_INVALID\"\ndomain: \"googleapis.com\"\nmetadata {\n  key: \"service\"\n  value: \"dataplex.googleapis.com\"\n}\nmetadata {\n  key: \"containerInfo\"\n  value: \"None\"\n}\nmetadata {\n  key: \"consumer\"\n  value: \"projects/None\"\n}\n, locale: \"en-US\"\nmessage: \"Permission denied on resource project None.\"\n, links {\n  description: \"Google developers console\"\n  url: \"https://console.developers.google.com\"\n}\n]"
+}

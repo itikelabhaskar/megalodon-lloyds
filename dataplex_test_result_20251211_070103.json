@@ -1,0 +1,164 @@
+{
+  "status": "scan_completed",
+  "scan_id": "dq-profile-policies-week1-1765416564",
+  "table": "hackathon-practice-480508.bancs_dataset.policies_week1",
+  "scan_types": [
+    "DATAPLEX_PROFILE"
+  ],
+  "findings": {
+    "total_rows": 100,
+    "total_columns": 27,
+    "null_rates": {
+      "CUS_ID": "0.0%",
+      "CUS_KEY_PARTY_ID": "0.0%",
+      "CUS_KEY_CUST_NO": "0.0%",
+      "CUS_FORNAME": "0.0%",
+      "CUS_SURNAME": "0.0%",
+      "CUS_NI_NO": "0.0%",
+      "CUS_DOB": "2.0%",
+      "CUS_SEX_CD": "0.0%",
+      "CUS_OCCUP_CD": "0.0%",
+      "CUS_LIFE_STATUS": "0.0%",
+      "CUS_POSTCODE": "1.0%",
+      "CUS_SMOKER_STAT": "0.0%",
+      "CUS_DEATH_DATE": "70.0%",
+      "CRL_KEY_POLICY_NO": "0.0%",
+      "SCM_PROJ_RET_DT": "0.0%",
+      "SCM_PROJ_RET_AGE": "0.0%",
+      "SCM_SCH_LEAVE_DATE": "81.0%",
+      "SCM_MEMBER_STATUS": "0.0%",
+      "SCH_SCHEME_TYP": "0.0%",
+      "SCH_RENEWAL_DT": "0.0%",
+      "POLID_FREQ": "0.0%",
+      "POLID_INCOME_TYPE": "0.0%",
+      "POLID_PAYMENT_DAY": "0.0%",
+      "POLI_GROSS_PMT": "0.0%",
+      "POLI_TAX_PMT": "0.0%",
+      "POLI_INCOME_PMT": "0.0%",
+      "UNT_TRAN_AMT": "0.0%"
+    },
+    "column_statistics": [
+      {
+        "name": "CUS_ID",
+        "type": "INTEGER",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_KEY_PARTY_ID",
+        "type": "INTEGER",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_KEY_CUST_NO",
+        "type": "INTEGER",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_FORNAME",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_SURNAME",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_NI_NO",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_DOB",
+        "type": "STRING",
+        "null_ratio": "2.0%"
+      },
+      {
+        "name": "CUS_SEX_CD",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_OCCUP_CD",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_LIFE_STATUS",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_POSTCODE",
+        "type": "STRING",
+        "null_ratio": "1.0%"
+      },
+      {
+        "name": "CUS_SMOKER_STAT",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "CUS_DEATH_DATE",
+        "type": "DATE",
+        "null_ratio": "70.0%"
+      },
+      {
+        "name": "CRL_KEY_POLICY_NO",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "SCM_PROJ_RET_DT",
+        "type": "DATE",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "SCM_PROJ_RET_AGE",
+        "type": "INTEGER",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "SCM_SCH_LEAVE_DATE",
+        "type": "DATE",
+        "null_ratio": "81.0%"
+      },
+      {
+        "name": "SCM_MEMBER_STATUS",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "SCH_SCHEME_TYP",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      },
+      {
+        "name": "SCH_RENEWAL_DT",
+        "type": "STRING",
+        "null_ratio": "0.0%"
+      }
+    ],
+    "data_quality_issues": [
+      {
+        "issue": "High null rate in CUS_DEATH_DATE",
+        "count": 70,
+        "severity": "high",
+        "recommendation": "Investigate completeness issues in CUS_DEATH_DATE"
+      },
+      {
+        "issue": "High null rate in SCM_SCH_LEAVE_DATE",
+        "count": 81,
+        "severity": "high",
+        "recommendation": "Investigate completeness issues in SCM_SCH_LEAVE_DATE"
+      }
+    ],
+    "recommended_rules": [
+      "Validate null rates for critical columns",
+      "Check for data type consistency",
+      "Verify value ranges for numeric columns",
+      "Ensure referential integrity across tables"
+    ]
+  },
+  "dataplex_resource": "projects/hackathon-practice-480508/locations/us-central1/dataScans/dq-profile-policies-week1-1765416564"
+}

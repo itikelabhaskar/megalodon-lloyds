@@ -259,7 +259,7 @@ st.markdown(f"**Autonomous DQ Detection, Treatment & Remediation for {organizati
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = "🔍 Identifier"
 
-# Create tabs for agents
+# Tab names for navigation
 tab_names = [
     "🤖 Orchestrator",
     "🔍 Identifier", 
@@ -269,20 +269,40 @@ tab_names = [
     "⚙️ Advanced Settings"
 ]
 
-# Determine default active tab index
-try:
-    default_index = tab_names.index(st.session_state.active_tab)
-except (ValueError, AttributeError):
-    default_index = 0
-
-tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_names)
+# Add navigation to sidebar (now that tab_names is defined)
+with st.sidebar:
+    st.divider()
+    
+    # Navigation in sidebar
+    st.markdown("### 📍 Navigation")
+    
+    # Determine default index
+    try:
+        default_index = tab_names.index(st.session_state.active_tab)
+    except (ValueError, AttributeError):
+        default_index = 1  # Default to Identifier
+    
+    selected_tab = st.radio(
+        "Go to:",
+        options=tab_names,
+        index=default_index,
+        label_visibility="collapsed"
+    )
+    
+    # Update active tab if changed
+    if selected_tab != st.session_state.active_tab:
+        st.session_state.active_tab = selected_tab
+        st.rerun()
 
 # Initialize Agent Debate Logger in session state
 if 'agent_debate_logger' not in st.session_state:
     from dq_agents.bonus_features import AgentDebateLogger
     st.session_state.agent_debate_logger = AgentDebateLogger()
 
-with tab0:
+# Render content based on active tab
+active_tab = st.session_state.active_tab
+
+if active_tab == "🤖 Orchestrator":
     st.header("🤖 Orchestrator Agent")
     st.markdown("**Master coordinator for the complete DQ workflow** - from detection to remediation")
     
@@ -488,7 +508,7 @@ with tab0:
                 st.session_state.agent_debate_logger.clear()
                 st.rerun()
 
-with tab1:
+elif active_tab == "🔍 Identifier":
     st.header("🔍 Identifier Agent")
     st.markdown("Detect data quality issues and generate SQL-based DQ rules for BaNCS tables")
     
@@ -631,8 +651,8 @@ with tab1:
     num_rules = st.slider(
         "Number of rules to generate per table:",
         min_value=5,
-        max_value=30,
-        value=10,
+        max_value=50,
+        value=20,
         help="How many DQ rules should the agent generate? (Includes cross-week rules)"
     )
     
@@ -1120,9 +1140,8 @@ with tab1:
         
         col_btn1, col_btn2, col_btn3 = st.columns([2, 2, 2])
         with col_btn1:
-            if st.button("▶️ Go to Treatment Agent", type="primary", key="goto_treatment", width='stretch'):
-                st.session_state.active_tab = "💊 Treatment Agent"
-                st.success("✅ Navigating to Treatment Agent... Refresh if tab doesn't switch.")
+            if st.button("▶️ Go to Treatment Agent", type="primary", key="goto_treatment", use_container_width=True):
+                st.session_state.active_tab = "💊 Treatment"
                 st.rerun()
         with col_btn2:
             st.metric("Total Rules", len(rules))
@@ -1143,7 +1162,7 @@ with tab1:
     """)
 
     
-with tab2:
+elif active_tab == "💊 Treatment":
     st.header("💊 Treatment Agent")
     st.markdown("**Workflow:** Run DQ rules → Filter offending rows → Group issues → Suggest remediation strategies")
     
@@ -1711,7 +1730,7 @@ Return JSON with:
                 st.markdown("### 📄 Analysis Response")
                 st.markdown(response_text)
 
-with tab3:
+elif active_tab == "🔧 Remediator":
     st.header("🔧 Remediator Agent")
     st.markdown("Execute approved DQ fixes with validation and safety checks")
     
@@ -2182,7 +2201,7 @@ with tab3:
                     st.rerun()
 
     
-with tab4:
+elif active_tab == "📊 Metrics":
     st.header("📊 Metrics Agent")
     st.markdown("**Comprehensive DQ Analytics, Cost of Inaction & Anomaly Detection**")
     
@@ -3258,7 +3277,7 @@ with tab4:
                         del st.session_state.report_config
                     st.rerun()
     
-with tab5:
+elif active_tab == "⚙️ Advanced Settings":
     with st.container():
         st.header("Advanced Settings")
         st.markdown("Configure system-level parameters and agent behaviors")

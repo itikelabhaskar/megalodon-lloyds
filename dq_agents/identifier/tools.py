@@ -7,6 +7,10 @@ from google.cloud import bigquery
 from google.adk.tools import ToolContext
 from google.adk.tools.bigquery.client import get_bigquery_client
 from typing import Dict, List
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # User agent for tracking
 USER_AGENT = "adk-dq-management-system"
@@ -227,9 +231,9 @@ def get_table_schema(
                 for field in table.schema
             ]
         }
-        return str(schema_info)
+        return json.dumps(schema_info, indent=2)
     except Exception as e:
-        return f"Error getting schema: {str(e)}"
+        return json.dumps({"error": str(e), "table_name": table_name})
 
 
 def _fallback_bigquery_profiling(table_name: str, scan_name: str, scan_id: str, settings: dict) -> str:
@@ -473,17 +477,17 @@ def trigger_dataplex_scan(
         return json.dumps(profiling_result, indent=2)
     
     except google_exceptions.PermissionDenied as e:
-        return json.dumps({
-            "status": "permission_error",
-            "error": "Missing Dataplex permissions. Ensure service account has roles/dataplex.admin",
-            "details": str(e)
-        }, indent=2)
+        # Dataplex permissions missing - fallback to BigQuery profiling
+        print(f"⚠️  Dataplex permission denied, using BigQuery fallback profiling...")
+        scan_name = f"fallback-{table_name}"
+        scan_id = f"bq-profile-{table_name}"
+        return _fallback_bigquery_profiling(table_name, scan_name, scan_id, settings)
     except Exception as e:
-        return json.dumps({
-            "status": "scan_error",
-            "error": str(e),
-            "fallback": "Error occurred during Dataplex scan"
-        }, indent=2)
+        # Any other error - fallback to BigQuery profiling
+        print(f"⚠️  Dataplex error ({str(e)[:100]}), using BigQuery fallback profiling...")
+        scan_name = f"fallback-{table_name}"
+        scan_id = f"bq-profile-{table_name}"
+        return _fallback_bigquery_profiling(table_name, scan_name, scan_id, settings)
 
 
 def execute_dq_rule(
