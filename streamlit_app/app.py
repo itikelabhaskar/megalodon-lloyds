@@ -610,10 +610,13 @@ with tab1:
     # Analysis options
     st.subheader("2. Analysis Options")
     
+    # GCP Integration Badge
+    st.info("☁️ **Real GCP Integration Active** - Using Google Cloud Dataplex API for data profiling (~60 seconds per table)")
+    
     col1, col2 = st.columns(2)
     with col1:
         include_schema = st.checkbox("Include Schema Analysis", value=True)
-        include_dataplex = st.checkbox("Run Data Profiling Analysis", value=True, help="Auto-enabled: Analyzes null rates, value ranges, and data patterns")
+        include_dataplex = st.checkbox("🔍 Run Dataplex Data Profiling", value=True, help="Uses REAL Google Cloud Dataplex API for profiling - analyzes null rates, value distributions, and data patterns")
         include_preexisting = st.checkbox("Load Pre-existing Rules (Collibra/Ataccama)", value=True, help="Auto-enabled: Reviews historical DQ rules")
     
     with col2:
@@ -694,7 +697,7 @@ with tab1:
                 tables_to_generate = selected_tables
                 all_cached_rules = []
             
-            with st.spinner("🔍 Identifier Agent is analyzing tables..."):
+            with st.spinner("🔍 Identifier Agent is analyzing tables... (Dataplex profiling takes ~60s per table)"):
                 try:
                     # Set up ADK components
                     session_service = InMemorySessionService()
@@ -891,6 +894,11 @@ with tab1:
                             st.info(f"💾 Cached {len(rules)} rules for `{table}`")
                     
                     st.success(f"✅ Generated {len(all_rules)} total rules ({len(all_cached_rules)} from cache, {len(all_rules) - len(all_cached_rules)} newly generated)")
+                    
+                    # Show Dataplex Console link
+                    dataplex_url = f"https://console.cloud.google.com/dataplex/dataScans?project={_project_id}"
+                    st.info(f"☁️ View Dataplex scans in GCP Console: [Open Dataplex]({dataplex_url})")
+                    
                     st.balloons()
                     st.rerun()
                     
