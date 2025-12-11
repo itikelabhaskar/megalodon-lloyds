@@ -27,6 +27,12 @@ When generating DQ rules:
 - Assign appropriate severity: critical, high, medium, low
 - Categorize by DQ dimension
 - **For cross-week rules**: Use UNION or JOIN across multiple week tables to detect temporal issues
+- **CRITICAL: Handle date type casting properly**:
+  * BigQuery date columns are often stored as STRING type
+  * When comparing dates, use PARSE_DATE() or SAFE.PARSE_DATE() to convert strings to dates
+  * Example: `PARSE_DATE('%Y-%m-%d', date_column) > CURRENT_DATE()`
+  * For nullable dates: `SAFE.PARSE_DATE('%Y-%m-%d', date_column) > CURRENT_DATE()`
+  * Common date formats: '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y'
 - Return rules in JSON format with a "natural_language" field that explains the rule in plain business English
 
 Available tools:

@@ -123,6 +123,39 @@ st.markdown("""
         font-weight: 500;
         box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
+    
+    /* Custom Header Styling */
+    .custom-header {
+        display: flex;
+        align-items: center;
+        padding: 1.5rem 0 1rem 0;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #363940;
+    }
+    
+    .custom-header img {
+        height: 60px;
+        margin-right: 1.5rem;
+    }
+    
+    .custom-header-text {
+        flex: 1;
+    }
+    
+    .custom-header-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #FAFAFA;
+        margin: 0;
+        line-height: 1.2;
+    }
+    
+    .custom-header-subtitle {
+        font-size: 1rem;
+        color: #B0B0B0;
+        margin: 0.25rem 0 0 0;
+        font-weight: 400;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -202,6 +235,31 @@ import base64
 # Initialize active tab in session state if not exists
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = "🔍 Identifier"
+
+# Add custom header with Lloyd's logo (BEFORE sidebar)
+import base64
+logo_path = "lloyd's logo.png"
+if os.path.exists(logo_path):
+    with open(logo_path, "rb") as f:
+        logo_base64 = base64.b64encode(f.read()).decode()
+    st.markdown(f"""
+    <div class="custom-header">
+        <img src="data:image/png;base64,{logo_base64}" alt="Lloyd's Logo">
+        <div class="custom-header-text">
+            <h1 class="custom-header-title">🔍 Data Quality Management System</h1>
+            <p class="custom-header-subtitle">Autonomous DQ Detection, Treatment & Remediation for Lloyd's Banking</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div class="custom-header">
+        <div class="custom-header-text">
+            <h1 class="custom-header-title">🔍 Data Quality Management System</h1>
+            <p class="custom-header-subtitle">Autonomous DQ Detection, Treatment & Remediation for Lloyd's Banking</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Tab names for navigation
 tab_names = [
@@ -315,34 +373,10 @@ if 'agent_debate_logger' not in st.session_state:
     from dq_agents.bonus_features import AgentDebateLogger
     st.session_state.agent_debate_logger = AgentDebateLogger()
 
-# Main title with Lloyd's logo inline
-col_logo, col_title = st.columns([1, 9])
-
-with col_logo:
-    # Display Lloyd's logo
-    try:
-        with open("lloyd's logo.png", "rb") as f:
-            logo_data = base64.b64encode(f.read()).decode()
-        st.markdown(
-            f"""
-            <img src="data:image/jpeg;base64,{logo_data}" 
-                 style="width: 100%; max-width: 100px; margin-top: 10px;">
-            """,
-            unsafe_allow_html=True
-        )
-    except:
-        pass  # If logo not found, skip
-
-with col_title:
-    st.title("🔍 Data Quality Management System")
-    organization_name = get_organization_name()
-    st.markdown(f"**Autonomous DQ Detection, Treatment & Remediation for {organization_name}**")
-
 # Render content based on active tab
 active_tab = st.session_state.active_tab
 
 if active_tab == "🤖 Orchestrator":
-    st.header("🤖 Orchestrator Agent")
     st.markdown("**Master coordinator for the complete DQ workflow** - from detection to remediation")
     
     with st.expander("ℹ️ About the Orchestrator", expanded=False):
@@ -382,10 +416,11 @@ if active_tab == "🤖 Orchestrator":
                     st.error("❌ No tables found. Run `python init_environment.py` to initialize.")
                     available_tables = ["policies_week1"]  # Fallback
                 
-                wf_table = st.selectbox(
-                    "Select table",
+                wf_tables = st.multiselect(
+                    "Select table(s)",
                     available_tables,
-                    help="Table to analyze"
+                    default=[available_tables[0]] if available_tables else [],
+                    help="Select one or more tables to analyze"
                 )
             
             with col_wf2:
@@ -395,7 +430,7 @@ if active_tab == "🤖 Orchestrator":
                     help="Automatically approve fixes with >90% confidence"
                 )
             
-            if st.button("🚀 Start Full Workflow", type="primary", key="start_full_wf", use_container_width=True):
+            if st.button("🚀 Start Full Workflow", type="primary", key="start_full_wf", use_container_width=True, disabled=len(wf_tables) == 0):
                 with st.status("🤖 Orchestrator is coordinating agents...", expanded=True) as status:
                     try:
                         from dq_agents.orchestrator.agent import orchestrator_agent
@@ -416,17 +451,21 @@ if active_tab == "🤖 Orchestrator":
                             user_id="streamlit_user"
                         ))
                         
+                        # Format tables list
+                        tables_str = ", ".join(wf_tables) if len(wf_tables) > 1 else wf_tables[0]
+                        
                         # Log orchestrator start
                         st.session_state.agent_debate_logger.log_agent_thought(
                             "Orchestrator",
-                            f"Starting full workflow for {wf_table}",
+                            f"Starting full workflow for {tables_str}",
                             "Initializing all agents",
                             "Workflow started"
                         )
                         
                         auto_approve_text = " with auto-approval enabled" if wf_auto_approve else ""
+                        tables_plural = "tables" if len(wf_tables) > 1 else "table"
                         prompt = (
-                            f"Execute the complete DQ workflow for table '{wf_table}'{auto_approve_text}:\n\n"
+                            f"Execute the complete DQ workflow for {tables_plural} '{tables_str}'{auto_approve_text}:\n\n"
                             "1. Call identifier agent to detect DQ issues and generate rules\n"
                             "2. Execute the generated rules and identify violations\n"
                             "3. Call treatment agent to analyze issues and suggest top 3 fixes\n"
@@ -548,7 +587,6 @@ if active_tab == "🤖 Orchestrator":
                 st.rerun()
 
 elif active_tab == "🔍 Identifier":
-    st.header("🔍 Identifier Agent")
     st.markdown("Detect data quality issues and generate SQL-based DQ rules for BaNCS tables")
     
     # File uploader for pre-existing DQ rules
@@ -1202,7 +1240,6 @@ elif active_tab == "🔍 Identifier":
 
     
 elif active_tab == "💊 Treatment":
-    st.header("💊 Treatment Agent")
     st.markdown("**Workflow:** Run DQ rules → Filter offending rows → Group issues → Suggest remediation strategies")
     
     # STEP 1: Run DQ Rules and Filter Offending Rows
@@ -1222,17 +1259,35 @@ elif active_tab == "💊 Treatment":
             if not available_rules:
                 st.error("No valid rules found. Please regenerate rules in Identifier Agent.")
             else:
+                # Select All / Deselect All buttons
+                col_select_all, col_deselect_all, col_spacer = st.columns([1, 1, 4])
+                with col_select_all:
+                    if st.button("☑️ Select All", key="select_all_rules", use_container_width=True):
+                        for idx in range(min(10, len(available_rules))):
+                            st.session_state[f"select_rule_{idx}"] = True
+                        st.rerun()
+                with col_deselect_all:
+                    if st.button("⬜ Deselect All", key="deselect_all_rules", use_container_width=True):
+                        for idx in range(min(10, len(available_rules))):
+                            st.session_state[f"select_rule_{idx}"] = False
+                        st.rerun()
+                
                 # Display rules to select
                 st.caption("Select DQ rules to run:")
+                
+                # Initialize session state for checkboxes if not exists
+                for idx in range(min(10, len(available_rules))):
+                    if f"select_rule_{idx}" not in st.session_state:
+                        st.session_state[f"select_rule_{idx}"] = (idx == 0)  # Default first one selected
                 
                 selected_rule_ids = []
                 for idx, rule in enumerate(available_rules[:10]):  # Show first 10
                     col1, col2, col3, col4 = st.columns([1, 3, 2, 2])
                     with col1:
+                        # Checkbox uses session state key directly, no value parameter
                         selected = st.checkbox(
                             "Select",
                             key=f"select_rule_{idx}",
-                            value=(idx == 0),
                             label_visibility="collapsed"
                         )
                         if selected:
@@ -1261,15 +1316,25 @@ elif active_tab == "💊 Treatment":
                             sql_preview = rule_sql.strip().replace('`', '')
                             full_table_ref = f"{project_id_preview}.{dataset_id_preview}.{table_name}"
                             
-                            # Replace all placeholder formats
-                            replacements = [
-                                "{table}", "{TABLE}", "{table_name}", "{TABLE_NAME}",
-                                "TABLE_NAME", "$table", "${table}",
-                                f"PROJECT.DATASET.{table_name}",
-                                f"project.dataset.{table_name}",
+                            # Replace all possible placeholder patterns (order matters)
+                            placeholder_patterns = [
+                                (f"PROJECT.DATASET.{table_name}", full_table_ref),
+                                (f"project.dataset.{table_name}", full_table_ref),
+                                ("PROJECT.DATASET.TABLE_NAME", full_table_ref),
+                                ("project.dataset.TABLE_NAME", full_table_ref),
+                                ("PROJECT.DATASET", f"{project_id_preview}.{dataset_id_preview}"),
+                                ("project.dataset", f"{project_id_preview}.{dataset_id_preview}"),
+                                ("{table}", full_table_ref),
+                                ("{TABLE}", full_table_ref),
+                                ("{table_name}", full_table_ref),
+                                ("{TABLE_NAME}", full_table_ref),
+                                ("TABLE_NAME", full_table_ref),
+                                ("$table", full_table_ref),
+                                ("${table}", full_table_ref),
                             ]
-                            for placeholder in replacements:
-                                sql_preview = sql_preview.replace(placeholder, full_table_ref)
+                            
+                            for old_pattern, new_pattern in placeholder_patterns:
+                                sql_preview = sql_preview.replace(old_pattern, new_pattern)
                             
                             # Add backticks
                             sql_preview = sql_preview.replace(full_table_ref, f"`{full_table_ref}`")
@@ -1293,6 +1358,8 @@ elif active_tab == "💊 Treatment":
                             del st.session_state['filtered_issues']
                         if 'grouped_issues' in st.session_state:
                             del st.session_state['grouped_issues']
+                        if 'failed_rules' in st.session_state:
+                            del st.session_state['failed_rules']
                         st.rerun()
                 
                 # Execute selected rules
@@ -1343,26 +1410,34 @@ elif active_tab == "💊 Treatment":
                                 # Clean and prepare SQL
                                 sql = rule_sql.strip()
                                 
-                                # Build the full table reference (without extra backticks if already present)
+                                # Build the full table reference
                                 full_table_ref = f"{project_id}.{dataset_id}.{table_name}"
                                 
                                 # Remove any existing backticks from the SQL first to avoid double-backticking
                                 sql = sql.replace('`', '')
                                 
-                                # Now replace ALL possible placeholder formats with the clean table reference
-                                replacements = [
-                                    "{table}", "{TABLE}", "{table_name}", "{TABLE_NAME}",
-                                    "TABLE_NAME", "$table", "${table}",
-                                    f"PROJECT.DATASET.{table_name}",
-                                    f"project.dataset.{table_name}",
-                                    f"PROJECT.DATASET.TABLE_NAME",
-                                    "PROJECT.DATASET.TABLE"
+                                # Replace all possible placeholder patterns
+                                # Order matters: replace more specific patterns first
+                                placeholder_patterns = [
+                                    (f"PROJECT.DATASET.{table_name}", full_table_ref),
+                                    (f"project.dataset.{table_name}", full_table_ref),
+                                    ("PROJECT.DATASET.TABLE_NAME", full_table_ref),
+                                    ("project.dataset.TABLE_NAME", full_table_ref),
+                                    ("PROJECT.DATASET", f"{project_id}.{dataset_id}"),
+                                    ("project.dataset", f"{project_id}.{dataset_id}"),
+                                    ("{table}", full_table_ref),
+                                    ("{TABLE}", full_table_ref),
+                                    ("{table_name}", full_table_ref),
+                                    ("{TABLE_NAME}", full_table_ref),
+                                    ("TABLE_NAME", full_table_ref),
+                                    ("$table", full_table_ref),
+                                    ("${table}", full_table_ref),
                                 ]
                                 
-                                for placeholder in replacements:
-                                    sql = sql.replace(placeholder, full_table_ref)
+                                for old_pattern, new_pattern in placeholder_patterns:
+                                    sql = sql.replace(old_pattern, new_pattern)
                                 
-                                # Now add backticks around the table reference
+                                # Now add backticks around all occurrences of the full table reference
                                 sql = sql.replace(full_table_ref, f"`{full_table_ref}`")
                                 
                                 # Validate SQL has basic structure
@@ -1419,18 +1494,24 @@ elif active_tab == "💊 Treatment":
                             # Clear progress indicators
                             progress_bar.empty()
                             
-                            # Store results
+                            # Store results in session state (including failed rules)
                             st.session_state.filtered_issues = filtered_issues
+                            st.session_state.failed_rules = failed_rules
                             
                             # Show results
                             if filtered_issues:
                                 total_violations = sum(f['total_count'] for f in filtered_issues)
                                 status.update(label=f"✅ Found {total_violations} violations across {len(filtered_issues)} rules", state="complete", expanded=False)
+                                st.success(f"✅ Found {total_violations} violations across {len(filtered_issues)} rules")
+                            elif failed_rules:
+                                status.update(label=f"⚠️ All {len(failed_rules)} rules failed - see details below", state="error", expanded=False)
                             else:
                                 status.update(label="ℹ️ No violations found in selected rules", state="complete", expanded=False)
+                                st.info("ℹ️ No violations found. All selected rules passed!")
                             
-                            # Show failed rules if any
+                            # Show failed rules if any (persistent, not inside status)
                             if failed_rules:
+                                st.warning(f"⚠️ {len(failed_rules)} rules failed to execute")
                                 with st.expander(f"⚠️ {len(failed_rules)} rules failed - Click to see details", expanded=True):
                                     for failure in failed_rules:
                                         if isinstance(failure, dict):
@@ -1441,7 +1522,9 @@ elif active_tab == "💊 Treatment":
                                         else:
                                             st.warning(failure)
                             
-                            st.rerun()
+                            # Only rerun if we have results to show
+                            if filtered_issues:
+                                st.rerun()
                             
                         except Exception as e:
                             status.update(label="❌ Critical error", state="error")
@@ -1449,6 +1532,18 @@ elif active_tab == "💊 Treatment":
                             import traceback
                             with st.expander("Show detailed error"):
                                 st.code(traceback.format_exc())
+    
+    # Display failed rules from session state (persistent after rerun)
+    if 'failed_rules' in st.session_state and st.session_state.failed_rules:
+        st.divider()
+        st.warning(f"⚠️ {len(st.session_state.failed_rules)} rules failed during last execution")
+        with st.expander("View Failed Rules Details", expanded=False):
+            for failure in st.session_state.failed_rules:
+                if isinstance(failure, dict):
+                    st.error(f"**Rule:** {failure['rule_name']}")
+                    st.error(f"**Error:** {failure['error']}")
+                    st.code(failure['sql'], language='sql')
+                    st.divider()
     
     # STEP 2: Display Filtered Issues (un-indented to tab level)
     if 'filtered_issues' in st.session_state and st.session_state.filtered_issues:
@@ -1756,7 +1851,8 @@ Return JSON with:
                                             }
                                             st.success(f"✅ Fix {rank} approved for {table_name}!")
                                             st.info("👉 Go to **Remediator** tab to execute the fix")
-                                            st.session_state.active_tab = "remediator"
+                                            st.session_state.active_tab = "🔧 Remediator"
+                                            st.rerun()
                                     with col_btn2:
                                         if st.button(f"❌ Reject Fix {rank}", key=f"reject_g{group_idx}_f{rank}"):
                                             st.warning("Fix rejected. Feedback logged to Knowledge Bank.")
@@ -1764,13 +1860,23 @@ Return JSON with:
                                     st.divider()
                 else:
                     st.warning("No issue groups generated")
+                
+                # Add navigation button to Remediator
+                st.divider()
+                st.markdown("### 🎯 Next Step: Execute Approved Fixes")
+                st.markdown("Once you've approved a fix above, go to the **Remediator** tab to execute it safely.")
+                
+                col_btn_nav, col_spacer = st.columns([2, 4])
+                with col_btn_nav:
+                    if st.button("▶️ Go to Remediator Agent", type="primary", key="goto_remediator", use_container_width=True):
+                        st.session_state.active_tab = "🔧 Remediator"
+                        st.rerun()
             
             except json.JSONDecodeError:
                 st.markdown("### 📄 Analysis Response")
                 st.markdown(response_text)
 
 elif active_tab == "🔧 Remediator":
-    st.header("🔧 Remediator Agent")
     st.markdown("Execute approved DQ fixes with validation and safety checks")
     
     # Check if there's an approved fix
@@ -1944,21 +2050,22 @@ elif active_tab == "🔧 Remediator":
                             
                             # Build prompt for dry run
                             prompt = f"""
-                            Perform a DRY RUN of this fix to preview affected rows without making changes.
-                            
-                            **Fix Details:**
-                            - Fix Type: {fix.get('fix_type')}
-                            - Action: {fix.get('action')}
-                            - Table: {table_name}
-                            - Project: {correct_project}
-                            - Dataset: {correct_dataset}
-                            
-                            **SQL (preprocessed):**
-                            {preprocessed_sql}
-                            
-                            Use the dry_run_fix() tool with table_name="{table_name}" to preview changes. 
-                            Return results in JSON format.
-                            """
+**DRY RUN REQUEST**
+
+You must call the dry_run_fix() tool to preview the changes before executing this fix.
+
+**Parameters for dry_run_fix():**
+- fix_sql: {preprocessed_sql}
+- table_name: {table_name}
+
+**Context:**
+- Fix Type: {fix.get('fix_type')}
+- Action: {fix.get('action')}
+- Project: {correct_project}
+- Dataset: {correct_dataset}
+
+Call dry_run_fix() now and return the result.
+"""
                             
                             # Run agent
                             content = types.Content(role="user", parts=[types.Part(text=prompt)])
@@ -1974,6 +2081,9 @@ elif active_tab == "🔧 Remediator":
                             else:
                                 last_event = events[-1]
                                 response_text = "".join([part.text for part in last_event.content.parts if hasattr(part, 'text') and part.text])
+                                
+                                # Debug: Show what we received
+                                st.info(f"✓ Received response ({len(response_text)} chars)")
                                 
                                 # Store dry run results
                                 st.session_state.dry_run_results = response_text
@@ -2033,10 +2143,27 @@ elif active_tab == "🔧 Remediator":
                             with st.expander("View Dry Run SQL"):
                                 st.code(dry_run_result['dry_run_sql'], language="sql")
                     else:
-                        st.error(f"❌ Dry run failed: {dry_run_result.get('error', 'Unknown error')}")
+                        # Show error with full context
+                        error_msg = dry_run_result.get('error', 'Unknown error')
+                        st.error(f"❌ Dry run failed: {error_msg}")
+                        
+                        # Show the full result for debugging
+                        with st.expander("🔍 View Full Response"):
+                            st.json(dry_run_result)
+                        
+                        # Show the raw agent response
+                        with st.expander("📝 Raw Agent Response"):
+                            st.markdown(dry_run_text)
                 
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ Failed to parse dry run response as JSON: {str(e)}")
+                    st.markdown("**Raw Response:**")
                     st.markdown(dry_run_text)
+                    
+                    # Try to show what we got
+                    with st.expander("🔍 Debug Info"):
+                        st.write(f"JSON string attempted: {json_str[:500]}...")
+                        st.write(f"Parse error: {str(e)}")
                 
                 st.divider()
                 
@@ -2241,7 +2368,6 @@ elif active_tab == "🔧 Remediator":
 
     
 elif active_tab == "📊 Metrics":
-    st.header("📊 Metrics Agent")
     st.markdown("**Comprehensive DQ Analytics, Cost of Inaction & Anomaly Detection**")
     
     # Mode selection
@@ -3318,7 +3444,6 @@ elif active_tab == "📊 Metrics":
     
 elif active_tab == "⚙️ Advanced Settings":
     with st.container():
-        st.header("Advanced Settings")
         st.markdown("Configure system-level parameters and agent behaviors")
         
         col1, col2 = st.columns(2)

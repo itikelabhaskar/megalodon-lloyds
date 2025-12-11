@@ -37,7 +37,7 @@
           "name": "cus_dob_future_check",
           "description": "Check if customer date of birth is in the future.  Addresses pre-existing rule COL_001.",
           "natural_language": "A customer's date of birth cannot be in the future. This rule identifies invalid birth dates.",
-          "sql": "SELECT * FROM `PROJECT.DATASET.TABLE_NAME` WHERE CUS_DOB > CURRENT_DATE()",
+          "sql": "SELECT * FROM `PROJECT.DATASET.TABLE_NAME` WHERE SAFE.PARSE_DATE('%Y-%m-%d', CUS_DOB) > CURRENT_DATE()",
           "severity": "critical",
           "category": "Accuracy",
           "dq_dimension": "Accuracy",
