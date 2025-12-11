@@ -14,13 +14,34 @@ def dry_run_fix(
     Perform a dry run of a fix by showing affected rows without making changes.
     Converts UPDATE/DELETE to SELECT to preview changes.
     """
-    project_id = os.getenv("BQ_DATA_PROJECT_ID")
+    project_id = os.getenv("BQ_DATA_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
     dataset_id = os.getenv("BQ_DATASET_ID")
     
+    if not project_id or not dataset_id:
+        return json.dumps({
+            "error": "Missing BQ_DATA_PROJECT_ID or BQ_DATASET_ID environment variables",
+            "status": "config_error"
+        })
+    
     try:
-        # Replace table placeholder
+        # Clean SQL - remove any hardcoded dataset/project references
+        sql = fix_sql.strip()
+        
+        # Replace common hardcoded patterns with correct ones
+        import re
+        # Remove dataset/project qualifiers from table references
+        # Pattern: dataset.table or project.dataset.table -> just table
+        sql = re.sub(r'\b[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.([a-zA-Z0-9_-]+)\b', r'\1', sql)
+        sql = re.sub(r'\b[a-zA-Z0-9_-]+\.([a-zA-Z0-9_-]+)\b(?!\s*\()', r'\1', sql)
+        
+        # Now build proper table reference
         full_table = f"`{project_id}.{dataset_id}.{table_name}`"
-        sql = fix_sql.replace("{table}", full_table).replace("TABLE_NAME", full_table).replace("{{table}}", full_table)
+        
+        # Replace table placeholders
+        sql = sql.replace("{table}", full_table).replace("TABLE_NAME", full_table).replace("{{table}}", full_table)
+        
+        # Replace bare table name with fully qualified name
+        sql = re.sub(rf'\b{table_name}\b', full_table, sql)
         
         # Convert UPDATE/DELETE to SELECT for dry run
         dry_run_sql = sql
@@ -89,13 +110,33 @@ def execute_fix(
     Execute a DQ fix on BigQuery table.
     Uses batch processing for large updates.
     """
-    project_id = os.getenv("BQ_DATA_PROJECT_ID")
+    project_id = os.getenv("BQ_DATA_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
     dataset_id = os.getenv("BQ_DATASET_ID")
     
+    if not project_id or not dataset_id:
+        return json.dumps({
+            "error": "Missing BQ_DATA_PROJECT_ID or BQ_DATASET_ID environment variables",
+            "status": "config_error"
+        })
+    
     try:
-        # Replace table placeholder
+        # Clean SQL - remove any hardcoded dataset/project references
+        sql = fix_sql.strip()
+        
+        # Replace common hardcoded patterns
+        import re
+        # Remove dataset/project qualifiers from table references
+        sql = re.sub(r'\b[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.([a-zA-Z0-9_-]+)\b', r'\1', sql)
+        sql = re.sub(r'\b[a-zA-Z0-9_-]+\.([a-zA-Z0-9_-]+)\b(?!\s*\()', r'\1', sql)
+        
+        # Now build proper table reference
         full_table = f"`{project_id}.{dataset_id}.{table_name}`"
-        sql = fix_sql.replace("{table}", full_table).replace("TABLE_NAME", full_table).replace("{{table}}", full_table)
+        
+        # Replace table placeholders
+        sql = sql.replace("{table}", full_table).replace("TABLE_NAME", full_table).replace("{{table}}", full_table)
+        
+        # Replace bare table name with fully qualified name
+        sql = re.sub(rf'\b{table_name}\b', full_table, sql)
         
         # Safety check: Ensure WHERE clause exists for UPDATE/DELETE
         if "UPDATE" in sql.upper() or "DELETE" in sql.upper():

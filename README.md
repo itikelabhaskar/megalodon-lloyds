@@ -1,6 +1,76 @@
-# Data Science with Multiple Agents
+# Data Quality Management System with Multi-Agent Framework
 
-## :star: :star: MAJOR UPDATE :star: :star:
+## 🎉 NEW: Auto-Discovery & Zero-Configuration Setup
+
+This system now features **automatic environment detection** - no manual configuration needed!
+
+### Quick Start (30 seconds)
+```powershell
+# 1. Authenticate with GCP
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Auto-detect everything!
+python init_environment.py
+
+# 4. Launch the app
+streamlit run streamlit_app/app.py
+```
+
+**That's it!** The system automatically detects:
+- ✅ GCP project & environment type
+- ✅ GCS buckets & data files
+- ✅ BigQuery datasets & tables
+- ✅ Table schemas & column types
+
+**Works on:** Personal GCP accounts, NayaOne hackathon environment, production environments
+
+📖 **See:** `ENVIRONMENT_SETUP.md` for detailed instructions
+
+---
+
+## :star: :star: DATA QUALITY AGENTS :star: :star:
+
+This project has been enhanced with a comprehensive **Data Quality Management System** featuring multiple specialized agents for detecting, treating, remediating, and measuring data quality issues.
+
+### New DQ Agent Features
+
+1. **Identifier Agent**: Automatically detects data quality issues across datasets
+2. **Treatment Agent**: Generates SQL remediation scripts for identified issues
+3. **Remediator Agent**: Executes fixes and validates results
+4. **Metrics Agent**: Calculates business impact and cost of inaction
+5. **Orchestrator Agent**: Coordinates end-to-end DQ workflows
+6. **Knowledge Bank**: Stores and retrieves DQ best practices
+7. **JIRA Integration**: Tracks DQ issues through mock ticketing system
+8. **Streamlit UI**: Interactive 6-tab interface for all operations
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  Data Quality Orchestrator              │
+│                 (Coordinates all agents)                │
+└──────────────┬────────────────┬────────────┬────────────┘
+               │                │            │
+       ┌───────▼──────┐  ┌─────▼─────┐  ┌──▼──────────┐
+       │  Identifier  │  │ Treatment │  │ Remediator  │
+       │    Agent     │  │   Agent   │  │    Agent    │
+       └──────┬───────┘  └─────┬─────┘  └──┬──────────┘
+              │                │            │
+              └────────┬───────┴────────────┘
+                       │
+                ┌──────▼────────┐
+                │    Metrics    │
+                │     Agent     │
+                └───────────────┘
+```
+
+---
+
+## :star: :star: ORIGINAL DATA SCIENCE AGENT :star: :star:
 
 Note for previous users of the Data Science Agent: this newly released version
 of the Data Science Agent introduces some significant changes. Please read this

@@ -1,0 +1,152 @@
+{
+  "project_id": "hackathon-practice-480508",
+  "environment_type": "personal_development",
+  "gcs": {
+    "bucket": "run-sources-hackathon-practice-480508-us-central1",
+    "data_folder": "",
+    "csv_files": [
+      "Week1.csv",
+      "Week2.csv",
+      "Week3.csv",
+      "Week4.csv"
+    ]
+  },
+  "bigquery": {
+    "dataset_id": "bancs_dataset",
+    "tables": [
+      "policies_week1",
+      "policies_week2",
+      "policies_week3",
+      "policies_week4"
+    ],
+    "schema": {
+      "columns": [
+        {
+          "name": "CUS_ID",
+          "type": "INTEGER"
+        },
+        {
+          "name": "CUS_KEY_PARTY_ID",
+          "type": "INTEGER"
+        },
+        {
+          "name": "CUS_KEY_CUST_NO",
+          "type": "INTEGER"
+        },
+        {
+          "name": "CUS_FORNAME",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_SURNAME",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_NI_NO",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_DOB",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_SEX_CD",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_OCCUP_CD",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_LIFE_STATUS",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_POSTCODE",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_SMOKER_STAT",
+          "type": "STRING"
+        },
+        {
+          "name": "CUS_DEATH_DATE",
+          "type": "DATE"
+        },
+        {
+          "name": "CRL_KEY_POLICY_NO",
+          "type": "STRING"
+        },
+        {
+          "name": "SCM_PROJ_RET_DT",
+          "type": "DATE"
+        },
+        {
+          "name": "SCM_PROJ_RET_AGE",
+          "type": "INTEGER"
+        },
+        {
+          "name": "SCM_SCH_LEAVE_DATE",
+          "type": "DATE"
+        },
+        {
+          "name": "SCM_MEMBER_STATUS",
+          "type": "STRING"
+        },
+        {
+          "name": "SCH_SCHEME_TYP",
+          "type": "STRING"
+        },
+        {
+          "name": "SCH_RENEWAL_DT",
+          "type": "STRING"
+        },
+        {
+          "name": "POLID_FREQ",
+          "type": "STRING"
+        },
+        {
+          "name": "POLID_INCOME_TYPE",
+          "type": "STRING"
+        },
+        {
+          "name": "POLID_PAYMENT_DAY",
+          "type": "INTEGER"
+        },
+        {
+          "name": "POLI_GROSS_PMT",
+          "type": "INTEGER"
+        },
+        {
+          "name": "POLI_TAX_PMT",
+          "type": "FLOAT"
+        },
+        {
+          "name": "POLI_INCOME_PMT",
+          "type": "FLOAT"
+        },
+        {
+          "name": "UNT_TRAN_AMT",
+          "type": "INTEGER"
+        }
+      ],
+      "key_columns": {
+        "customer_id": "CUS_ID",
+        "date_fields": [
+          "CUS_DOB",
+          "CUS_DEATH_DATE",
+          "SCM_SCH_LEAVE_DATE"
+        ],
+        "amount_fields": [
+          "POLI_GROSS_PMT",
+          "POLI_TAX_PMT",
+          "POLI_INCOME_PMT"
+        ],
+        "status_fields": [
+          "CUS_LIFE_STATUS",
+          "SCM_MEMBER_STATUS"
+        ]
+      }
+    }
+  }
+}

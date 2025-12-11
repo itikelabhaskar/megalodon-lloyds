@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+docs/
+environment/docs/
+
+# Temporary files
+*.log
+.DS_Store
+Thumbs.db
+
+# Environment files (will be set in Cloud Run)
+.env
+.env.local
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Cache files
+dq_rules_cache.json
+environment_config.json
+
+# Large test files
+final/
+Imporvement/
+eval/
+
+# Unnecessary config
+.python-version

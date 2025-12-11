@@ -1,0 +1,387 @@
+# Orchestration Workflow Guide
+
+## Overview
+
+The Orchestrator Agent is the master coordinator that manages the complete Data Quality workflow across all specialized agents. It implements intelligent agent coordination, state management, and Human-in-the-Loop (HITL) checkpoints.
+
+## Workflow Phases
+
+### Phase 1: Detection (Identifier Agent)
+**Goal**: Discover all data quality issues
+
+**Process**:
+1. Orchestrator calls Identifier Agent
+2. Identifier analyzes table schema
+3. Generates DQ rules (AI + pre-existing)
+4. Executes rules and identifies violations
+5. Returns issue list to Orchestrator
+
+**Agent Debate Example**:
+```
+Orchestrator (10:00:00)
+Thought: Starting detection phase for policies_week1
+Action: Calling Identifier Agent
+
+Identifier Agent (10:00:02)
+Thought: Analyzing schema... Found 15 columns
+Action: Generating DQ rules for each column
+
+Identifier Agent (10:00:05)
+Thought: Generated 12 rules. Executing against data.
+Action: Running SQL queries
+
+Identifier Agent (10:00:10)
+Result: Found 127 violations across 8 rule categories
+```
+
+### Phase 2: Analysis (Treatment Agent)
+**Goal**: Determine best fixes for each issue
+
+**Process**:
+1. Orchestrator passes issues to Treatment Agent
+2. Treatment analyzes each issue type
+3. Checks Knowledge Bank for precedents
+4. Performs root cause clustering
+5. Ranks top 3 fix suggestions per issue
+6. Returns fix recommendations
+
+**HITL Checkpoint**:
+- Orchestrator requests human approval
+- Displays fix suggestions with confidence scores
+- Waits for user input before proceeding
+
+**Agent Debate Example**:
+```
+Treatment Agent (10:00:15)
+Thought: Analyzing 127 issues. Grouping by similarity.
+Action: Performing root cause clustering
+
+Treatment Agent (10:00:18)
+Result: 95 issues (74.8%) originated from Legacy_System_A during midnight batch job
+
+Treatment Agent (10:00:20)
+Thought: Checking Knowledge Bank for similar patterns...
+Action: Found historical precedent with 95% confidence
+
+Treatment Agent (10:00:22)
+Recommendation: Apply NULL fix (based on KB precedent #FIX_001)
+Confidence: 95%
+
+Orchestrator (10:00:23)
+Thought: High confidence fix available
+Action: Requesting HITL approval
+```
+
+### Phase 3: Execution (Remediator Agent)
+**Goal**: Safely apply approved fixes
+
+**Process**:
+1. Orchestrator calls Remediator with approved fixes
+2. Remediator performs dry-run in shadow table
+3. Generates Time Travel Diff view
+4. Applies fixes to production (if approved)
+5. Validates results
+6. Creates JIRA tickets for failures
+
+**Agent Debate Example**:
+```
+Remediator Agent (10:05:00)
+Thought: Received approval for 89 fixes
+Action: Creating shadow table for validation
+
+Remediator Agent (10:05:05)
+Thought: Shadow table created. Testing fixes...
+Action: Running dry-run
+
+Remediator Agent (10:05:10)
+Result: All 89 fixes passed validation. No side effects detected.
+
+Remediator Agent (10:05:12)
+Action: Applying fixes to production table
+
+Remediator Agent (10:05:20)
+Result: SUCCESS - 89 rows updated, 0 errors
+```
+
+### Phase 4: Reporting (Metrics Agent)
+**Goal**: Provide analytics and business impact
+
+**Process**:
+1. Orchestrator calls Metrics Agent
+2. Metrics calculates Cost of Inaction
+3. Runs anomaly detection
+4. Generates executive report
+5. Returns comprehensive analytics
+
+**Agent Debate Example**:
+```
+Metrics Agent (10:05:25)
+Thought: Calculating financial impact...
+Action: Running Cost of Inaction formula
+
+Metrics Agent (10:05:28)
+Result: Total exposure = £14.2M, Monthly COI = £50K
+
+Metrics Agent (10:05:30)
+Thought: Running anomaly detection with IsolationForest
+Action: Analyzing numerical columns
+
+Metrics Agent (10:05:35)
+Result: Detected 23 anomalies (2.1% of records)
+```
+
+## Orchestrator Decision Logic
+
+### When to Auto-Approve
+```python
+if fix_confidence > 0.90 and knowledge_bank_match:
+    # Auto-approve without HITL
+    remediator_agent.execute(fix)
+else:
+    # Request human approval
+    orchestrator.request_hitl_approval(fix)
+```
+
+### Error Handling
+```python
+try:
+    result = remediator_agent.execute(fix)
+except Exception as e:
+    # Create JIRA ticket
+    jira_system.create_ticket(issue, error=str(e))
+    # Log for human review
+    orchestrator.log_failure(issue, e)
+```
+
+### State Management
+
+The Orchestrator maintains state across all phases:
+
+```json
+{
+  "workflow_id": "WF_2025_001",
+  "table": "policies_week1",
+  "phase": "execution",
+  "identifier_output": {
+    "rules_generated": 12,
+    "violations_found": 127
+  },
+  "treatment_output": {
+    "fixes_suggested": 127,
+    "confidence_scores": {...},
+    "approved_fixes": 89
+  },
+  "remediator_output": {
+    "fixes_applied": 89,
+    "success_rate": 1.0,
+    "jira_tickets": []
+  },
+  "metrics_output": {
+    "cost_of_inaction": 50000,
+    "anomalies_detected": 23
+  }
+}
+```
+
+## Bonus Features Integration
+
+### Time Travel Diff View
+
+Automatically generated by Remediator during dry-run:
+
+```python
+from dq_agents.bonus_features import TimeTravelDiff
+
+diff = TimeTravelDiff.generate_diff(
+    original_df=before_data,
+    fixed_df=after_data,
+    confidence_scores=treatment_confidences
+)
+
+# Display in Streamlit
+st.dataframe(diff)
+```
+
+### Agent Debate Mode
+
+Logged automatically by each agent:
+
+```python
+from dq_agents.bonus_features import AgentDebateLogger
+
+logger = AgentDebateLogger()
+
+# Log individual thoughts
+logger.log_agent_thought(
+    agent_name="Identifier",
+    thought="Found 127 violations",
+    action="Passing to Treatment Agent"
+)
+
+# Log debates/disagreements
+logger.log_agent_debate(
+    agent1="Treatment",
+    statement1="This looks like an anomaly",
+    agent2="Metrics",
+    statement2="This is a valid 'Jumbo Policy' - not an error",
+    resolution="Metrics Agent correct. Added exception to rules."
+)
+```
+
+### Root Cause Clustering
+
+Automatically performed by Treatment Agent:
+
+```python
+from dq_agents.bonus_features import RootCauseClusterer
+
+clusterer = RootCauseClusterer()
+analysis = clusterer.analyze_metadata(
+    issues_df=violations_df,
+    metadata_columns=['source_system', 'created_by', 'created_time']
+)
+
+narrative = clusterer.generate_root_cause_narrative(analysis)
+# Displays: "74.8% of issues from Legacy_System_A during midnight batch"
+```
+
+## Usage Examples
+
+### Example 1: Full Automated Workflow
+
+```python
+# User clicks "Start Full Workflow" in Streamlit
+orchestrator_agent.send_message("""
+Execute complete DQ workflow for policies_week1 with auto-approval:
+1. Detect issues
+2. Suggest fixes
+3. Execute approved fixes
+4. Generate report
+""")
+
+# Output:
+"""
+PHASE 1: DETECTION ✅
+- 12 rules generated
+- 127 violations found
+
+PHASE 2: ANALYSIS ✅
+- 127 fix suggestions ranked
+- 89 auto-approved (high confidence)
+- 38 require human approval
+
+PHASE 3: EXECUTION ✅
+- 89 fixes applied successfully
+- 0 failures
+- Time Travel Diff available
+
+PHASE 4: REPORTING ✅
+- Cost of Inaction: £50K/month
+- 23 anomalies detected
+- Executive report generated
+"""
+```
+
+### Example 2: Natural Language Request
+
+```python
+# User types: "Show me the top 5 most expensive data quality issues"
+orchestrator_agent.send_message("""
+Show me the top 5 most expensive data quality issues
+""")
+
+# Orchestrator logic:
+# 1. Call Identifier to get all issues
+# 2. Call Metrics to calculate COI for each
+# 3. Sort by COI descending
+# 4. Return top 5 with details
+```
+
+### Example 3: Custom Workflow
+
+```python
+# User selects: Identifier + Metrics (skip Treatment/Remediation)
+orchestrator_agent.send_message("""
+For policies_week1:
+1. Call identifier agent to detect issues
+2. Call metrics agent to calculate Cost of Inaction
+3. Skip treatment and remediation
+4. Return analytics only
+""")
+```
+
+## HITL Checkpoints
+
+The Orchestrator implements Human-in-the-Loop at critical points:
+
+### Checkpoint 1: After Detection
+```
+🤚 HUMAN APPROVAL REQUIRED
+
+Identifier Agent found 127 violations.
+
+Do you want to proceed with treatment analysis?
+[Yes] [No] [View Details]
+```
+
+### Checkpoint 2: Before Execution
+```
+🤚 HUMAN APPROVAL REQUIRED
+
+Treatment Agent recommends 89 fixes:
+- 89 high confidence (95%+)
+- 38 medium confidence (70-95%)
+- 0 low confidence (<70%)
+
+Approve fixes?
+[Approve All] [Approve High Only] [Custom Selection] [Cancel]
+```
+
+### Checkpoint 3: After Dry-Run
+```
+🤚 HUMAN APPROVAL REQUIRED
+
+Dry-run completed successfully:
+✅ 89 rows will be modified
+✅ No validation errors
+✅ No side effects detected
+
+View Time Travel Diff? [View]
+
+Apply to production?
+[Yes] [No] [Cancel]
+```
+
+## Performance Metrics
+
+The Orchestrator tracks these metrics:
+
+| Metric | Description | Target |
+|--------|-------------|--------|
+| **End-to-End Time** | Total workflow duration | <5 minutes |
+| **Agent Success Rate** | % of agent calls that succeed | >95% |
+| **HITL Response Time** | Time waiting for human approval | Variable |
+| **Auto-Fix Rate** | % of fixes applied without human intervention | >80% |
+
+## Best Practices
+
+1. **Always start with Orchestrator** for complex workflows
+2. **Use Agent Debate Mode** to understand reasoning
+3. **Review Time Travel Diff** before production changes
+4. **Set auto-approval thresholds** based on your risk tolerance
+5. **Monitor Root Cause Clustering** to fix processes, not just data
+
+## Troubleshooting
+
+### Issue: Orchestrator times out
+**Solution**: Break into smaller workflows or increase timeout settings
+
+### Issue: Agents return conflicting recommendations
+**Solution**: Review Agent Debate logs to understand reasoning, make manual decision
+
+### Issue: HITL approval stuck
+**Solution**: Check session state, clear and restart workflow if needed
+
+---
+
+**For implementation details, see `dq_agents/orchestrator/agent.py`**

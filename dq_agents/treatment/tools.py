@@ -12,6 +12,7 @@ from google.adk.tools import ToolContext
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from knowledge_bank.kb_manager import get_kb_manager
+from environment.config_utils import get_project_id, get_dataset_id, get_tables, get_customer_id_column
 
 
 def execute_dq_rule(
@@ -30,8 +31,8 @@ def execute_dq_rule(
     Returns:
         JSON string with issue count and sample violations
     """
-    project_id = os.getenv("BQ_DATA_PROJECT_ID")
-    dataset_id = os.getenv("BQ_DATASET_ID")
+    project_id = get_project_id()
+    dataset_id = get_dataset_id()
     
     # Replace placeholder with actual table reference
     full_table = f"`{project_id}.{dataset_id}.{table_name}`"
@@ -84,22 +85,30 @@ def query_related_data(
     
     client = bigquery.Client(project=project_id)
     
-    if all_weeks:
-        # Query all weeks with UNION ALL
-        sql = f"""
-        SELECT 'week1' as week, * FROM `{project_id}.{dataset_id}.policies_week1` WHERE CUS_ID = '{customer_id}'
-        UNION ALL
-        SELECT 'week2' as week, * FROM `{project_id}.{dataset_id}.policies_week2` WHERE CUS_ID = '{customer_id}'
-        UNION ALL
-        SELECT 'week3' as week, * FROM `{project_id}.{dataset_id}.policies_week3` WHERE CUS_ID = '{customer_id}'
-        UNION ALL
-        SELECT 'week4' as week, * FROM `{project_id}.{dataset_id}.policies_week4` WHERE CUS_ID = '{customer_id}'
-        ORDER BY week
-        """
+    # Get all available week tables dynamically
+    all_tables = get_tables()
+    week_tables = [t for t in all_tables if 'week' in t.lower()]
+    
+    # Get customer ID column name dynamically
+    customer_id_col = get_customer_id_column() or 'CUS_ID'  # Fallback to CUS_ID
+    
+    if all_weeks and week_tables:
+        # Build UNION ALL query dynamically for all week tables
+        union_queries = []
+        for table in week_tables:
+            # Extract week identifier from table name
+            week_id = table.replace('policies_', '').replace('_', '')
+            union_queries.append(
+                f"SELECT '{week_id}' as week, * FROM `{project_id}.{dataset_id}.{table}` WHERE {customer_id_col} = '{customer_id}'"
+            )
+        
+        sql = "\nUNION ALL\n".join(union_queries) + "\nORDER BY week"
     else:
+        # Use first available table
+        first_table = week_tables[0] if week_tables else all_tables[0] if all_tables else 'policies_week1'
         sql = f"""
-        SELECT * FROM `{project_id}.{dataset_id}.policies_week1` 
-        WHERE CUS_ID = '{customer_id}'
+        SELECT * FROM `{project_id}.{dataset_id}.{first_table}` 
+        WHERE {customer_id_col} = '{customer_id}'
         """
     
     try:
