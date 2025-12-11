@@ -197,8 +197,48 @@ def clear_cache_for_table(table_name):
         return save_rules_cache(cache)
     return False
 
-# Sidebar for settings
+import base64
+
+# Initialize active tab in session state if not exists
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = "🔍 Identifier"
+
+# Tab names for navigation
+tab_names = [
+    "🤖 Orchestrator",
+    "🔍 Identifier", 
+    "💊 Treatment", 
+    "🔧 Remediator",
+    "📊 Metrics",
+    "⚙️ Advanced Settings"
+]
+
+# Sidebar with Navigation FIRST, then Settings
 with st.sidebar:
+    # Navigation in sidebar - FIRST
+    st.markdown("### 📍 Navigation")
+    
+    # Determine default index
+    try:
+        default_index = tab_names.index(st.session_state.active_tab)
+    except (ValueError, AttributeError):
+        default_index = 1  # Default to Identifier
+    
+    selected_tab = st.radio(
+        "Go to:",
+        options=tab_names,
+        index=default_index,
+        label_visibility="collapsed"
+    )
+    
+    # Update active tab if changed
+    if selected_tab != st.session_state.active_tab:
+        st.session_state.active_tab = selected_tab
+        st.rerun()
+    
+    st.divider()
+    
+    # Settings - SECOND
     st.title("⚙️ Settings")
     
     with st.expander("☁️ GCP Configuration", expanded=True):
@@ -249,55 +289,54 @@ with st.sidebar:
     
     if env_type == 'manual' or not available_tables:
         st.warning("Run `init_environment.py` for auto-setup")
-
-# Main app header
-st.title("🔍 Data Quality Management System")
-organization_name = get_organization_name()
-st.markdown(f"**Autonomous DQ Detection, Treatment & Remediation for {organization_name}**")
-
-# Initialize active tab in session state if not exists
-if 'active_tab' not in st.session_state:
-    st.session_state.active_tab = "🔍 Identifier"
-
-# Tab names for navigation
-tab_names = [
-    "🤖 Orchestrator",
-    "🔍 Identifier", 
-    "💊 Treatment", 
-    "🔧 Remediator",
-    "📊 Metrics",
-    "⚙️ Advanced Settings"
-]
-
-# Add navigation to sidebar (now that tab_names is defined)
-with st.sidebar:
+    
+    # GCP Logo at the bottom - pinned
     st.divider()
+    st.markdown("<br>" * 2, unsafe_allow_html=True)  # Add spacing to push logo down
     
-    # Navigation in sidebar
-    st.markdown("### 📍 Navigation")
-    
-    # Determine default index
     try:
-        default_index = tab_names.index(st.session_state.active_tab)
-    except (ValueError, AttributeError):
-        default_index = 1  # Default to Identifier
-    
-    selected_tab = st.radio(
-        "Go to:",
-        options=tab_names,
-        index=default_index,
-        label_visibility="collapsed"
-    )
-    
-    # Update active tab if changed
-    if selected_tab != st.session_state.active_tab:
-        st.session_state.active_tab = selected_tab
-        st.rerun()
+        with open("Google_Cloud_logo.svg.png", "rb") as f:
+            gcp_logo_data = base64.b64encode(f.read()).decode()
+        st.markdown(
+            f"""
+            <div style="position: fixed; bottom: 20px; width: 250px; text-align: center;">
+                <img src="data:image/png;base64,{gcp_logo_data}" 
+                     style="width: 100%; max-width: 180px; opacity: 0.7;">
+                <p style="font-size: 10px; color: #666; margin-top: 5px;">Powered by Google Cloud</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    except:
+        pass  # If logo not found, skip
 
 # Initialize Agent Debate Logger in session state
 if 'agent_debate_logger' not in st.session_state:
     from dq_agents.bonus_features import AgentDebateLogger
     st.session_state.agent_debate_logger = AgentDebateLogger()
+
+# Main title with Lloyd's logo inline
+col_logo, col_title = st.columns([1, 9])
+
+with col_logo:
+    # Display Lloyd's logo
+    try:
+        with open("lloyd's logo.png", "rb") as f:
+            logo_data = base64.b64encode(f.read()).decode()
+        st.markdown(
+            f"""
+            <img src="data:image/jpeg;base64,{logo_data}" 
+                 style="width: 100%; max-width: 100px; margin-top: 10px;">
+            """,
+            unsafe_allow_html=True
+        )
+    except:
+        pass  # If logo not found, skip
+
+with col_title:
+    st.title("🔍 Data Quality Management System")
+    organization_name = get_organization_name()
+    st.markdown(f"**Autonomous DQ Detection, Treatment & Remediation for {organization_name}**")
 
 # Render content based on active tab
 active_tab = st.session_state.active_tab
