@@ -1464,6 +1464,9 @@ elif active_tab == "💊 Treatment":
                                 # Pattern to match PROJECT.DATASET.any_table_name (case insensitive)
                                 def replace_table_ref_exec(match):
                                     matched_table = match.group(1)
+                                    # If matched_table is a placeholder like TABLE_NAME, use the actual table name
+                                    if matched_table.upper() == 'TABLE_NAME':
+                                        matched_table = table_name
                                     return f"`{project_id}.{dataset_id}.{matched_table}`"
                                 
                                 # Replace PROJECT.DATASET.table_name patterns (handles cross-table queries)
@@ -1474,12 +1477,12 @@ elif active_tab == "💊 Treatment":
                                     sql = sql.replace('{TABLE_NAME}', f"`{full_table_ref}`")
                                 
                                 # Also handle simple TABLE_NAME placeholder if it wasn't caught
-                                if 'TABLE_NAME' in sql:
+                                elif 'TABLE_NAME' in sql:
                                     sql = sql.replace('TABLE_NAME', f"`{full_table_ref}`")
                                 
-                                # Ensure the main table is also backticked if not already
-                                if full_table_ref in sql and f"`{full_table_ref}`" not in sql:
-                                    sql = sql.replace(full_table_ref, f"`{full_table_ref}`")
+                                # Note: We removed the "Ensure the main table is also backticked" check
+                                # because it was causing double-backticking after the replacements above
+                                # The regex and placeholder replacements already handle backticking correctly
                                 
                                 # Validate SQL has basic structure
                                 if 'SELECT' not in sql.upper():
