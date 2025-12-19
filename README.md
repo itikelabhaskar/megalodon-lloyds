@@ -1,4 +1,4 @@
-# Data Quality Management System with Multi-Agent Framework
+# Data Quality Management System with Multi-Agent Framewor
 
 ## 🎉 NEW: Auto-Discovery & Zero-Configuration Setup
 
