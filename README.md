@@ -1,6 +1,6 @@
 # Data Quality Management System with Multi-Agent Framewor
 
-## 🎉 NEW: Auto-Discovery & Zero-Configuration Setup
+## Auto-Discovery & Zero-Configuration Setup
 
 This system now features **automatic environment detection** - no manual configuration needed!
 
@@ -1002,25 +1002,6 @@ You should see the ADK Web UI for the Data Science Agent.
 You can clean up this agent sample by:
 - Deleting the [Cloud Run Services](https://console.cloud.google.com/run).
 - Deleting the [Cloud SQL instance](https://console.cloud.google.com/sql/instances).
-
-
-## Disclaimer
-
-This agent sample is provided for illustrative purposes only and is not intended
-for production use. It serves as a basic example of an agent and a foundational
-starting point for individuals or teams to develop their own agents.
-
-This sample has not been rigorously tested, may contain bugs or limitations, and
-does not include features or optimizations typically required for a production
-environment (e.g., robust error handling, security measures, scalability,
-performance considerations, comprehensive logging, or advanced configuration
-options).
-
-Users are solely responsible for any further development, testing, security
-hardening, and deployment of agents based on this sample. We recommend thorough
-review, testing, and the implementation of appropriate safeguards before using
-any derived agent in a live or critical system.
-
 
 [mcp-toolbox]: https://googleapis.github.io/genai-toolbox/
 [adk-builtin-tool-bq]: https://google.github.io/adk-docs/tools/built-in-tools/#bigquery
